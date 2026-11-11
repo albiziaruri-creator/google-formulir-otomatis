@@ -423,9 +423,9 @@ function buatGoogleForm() {
     shuffleChoice === ui.Button.YES;
 
 
-  // Membaca kolom A-T
+  // Membaca kolom A-U
   const values = sheet.getRange(
-    2, 1, sheet.getLastRow() - 1, 20
+    2, 1, sheet.getLastRow() - 1, 21
   ).getValues();
 
   // Mengambil semua soal yang tersedia
@@ -594,6 +594,14 @@ function buatGoogleForm() {
     const question = String(row[8]).trim();
     const points = Number(row[17]);
     const description = String(row[19] || "").trim();
+    const imageId = String(row[20] || "").trim();
+
+    const material = String(row[4] || "").trim();
+const objective = String(row[5] || "").trim();
+const bloom = String(row[6] || "").trim();
+const cognitive = String(row[7] || "").trim();
+    
+    Logger.log("ID SOAL: " + id + " | IMAGE ID: " + imageId);
 
     if (!Number.isInteger(points) || points < 0) {
       errors.push(
@@ -630,9 +638,9 @@ function buatGoogleForm() {
       }
 
       plan.push({
-        id, type, question, points,
-        description, options, key
-      });
+  id, type, question, points, material, objective, bloom, cognitive, material, objective, bloom, cognitive,
+  description, options, key, imageId
+});
 
     } else if (type === "PGK") {
 
@@ -651,7 +659,7 @@ function buatGoogleForm() {
       }
 
       plan.push({
-        id, type, question, points,
+        id, type, question, points, material, objective, bloom, cognitive, material, objective, bloom, cognitive,
         description, options, key
       });
 
@@ -704,7 +712,7 @@ function buatGoogleForm() {
       }
 
       plan.push({
-        id, type, question, points,
+        id, type, question, points, material, objective, bloom, cognitive,
         description, pairs, rightOptions
       });
 
@@ -716,7 +724,7 @@ function buatGoogleForm() {
       }
 
       plan.push({
-        id, type, question, points, description
+        id, type, question, points, material, objective, bloom, cognitive, description
       });
 
     } else if (type === "UR") {
@@ -727,7 +735,7 @@ function buatGoogleForm() {
       }
 
       plan.push({
-        id, type, question, points, description
+        id, type, question, points, material, objective, bloom, cognitive, description
       });
 
     } else {
@@ -773,7 +781,7 @@ function buatGoogleForm() {
       "Jawaban kamu sudah berhasil dikirim."
     );
     form.setProgressBar(true);
-    form.setShuffleQuestions(shuffleQuestions);
+    form.setShuffleQuestions(false);
     
     // Identitas peserta
     form.addTextItem()
@@ -793,13 +801,30 @@ function buatGoogleForm() {
       .setTitle("SOAL UJIAN")
       .setHelpText("Kerjakan semua pertanyaan dengan teliti.");
 
-
-    
     // Membuat soal
-    plan.forEach(q => {
+    // Mengacak urutan soal melalui Apps Script
+if (shuffleQuestions) {
+  for (let i = plan.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [plan[i], plan[j]] = [plan[j], plan[i]];
+  }
+}
+
+// Membuat soal
+plan.forEach(q => {
 
       if (q.type === "PG") {
+                // Menambahkan gambar jika tersedia
+        if (q.imageId) {
+          const imageFile = DriveApp.getFileById(q.imageId);
+          const imageItem = form.addImageItem();
 
+          imageItem
+            .setTitle("Gambar soal " + q.id)
+            .setImage(imageFile.getBlob())
+            .setAlignment(FormApp.Alignment.CENTER)
+            .setWidth(500);
+        }
         const item = form.addMultipleChoiceItem();
 
         item.setTitle(q.id + " - " + q.question);
@@ -916,6 +941,8 @@ function buatGoogleForm() {
 
     });
 
+    // Membuat kisi-kisi berdasarkan soal yang digunakan
+buatKisiKisi_(plan);
 
     // Menghubungkan respons ke spreadsheet
     form.setDestination(
@@ -946,3 +973,62 @@ function buatGoogleForm() {
   }
 
 }
+
+
+function buatKisiKisi_(questions) {
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("KISI_KISI");
+
+  if (!sheet) {
+    throw new Error("Sheet KISI_KISI tidak ditemukan.");
+  }
+
+  // Membersihkan kisi-kisi sebelumnya
+  sheet.clear();
+
+  // Judul laporan
+  sheet.getRange("A1:H1").merge();
+  sheet.getRange("A1")
+    .setValue("KISI-KISI UJIAN")
+    .setFontWeight("bold")
+    .setHorizontalAlignment("center");
+
+  // Judul tabel
+  const headers = [
+    "NO.",
+    "ID SOAL",
+    "MATERI",
+    "TUJUAN PEMBELAJARAN",
+    "LEVEL BLOOM",
+    "LEVEL KOGNITIF",
+    "JENIS SOAL",
+    "POIN"
+  ];
+
+  
+  sheet.getRange(3, 1, 1, headers.length)
+    .setValues([headers])
+    .setFontWeight("bold")
+    .setBackground("#d9ead3");
+
+  // Menyiapkan rincian soal
+  const rows = questions.map((q, index) => [
+    index + 1,
+    q.id,
+    q.material || "",
+    q.objective || "",
+    q.bloom || "",
+    q.cognitive || "",
+    q.type,
+    q.points
+  ]);
+
+  // Menuliskan rincian soal
+  if (rows.length > 0) {
+    sheet.getRange(4, 1, rows.length, 8)
+      .setValues(rows);
+  }
+
+}
+
