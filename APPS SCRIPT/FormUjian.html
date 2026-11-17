@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  font-family: Arial, sans-serif;
+  background: #F7F3E8;
+  color: #343127;
+}
+
+.container {
+  max-width: 680px;
+  margin: auto;
+  background: #FFFEFA;
+  border: 1px solid #E9DFC1;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 8px 30px rgba(90, 70, 20, 0.09);
+}
+
+h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #6B5415;
+}
+
+.subtitle {
+  color: #8A8067;
+  font-size: 13px;
+  margin-bottom: 25px;
+}
+
+.field {
+  margin-bottom: 17px;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 7px;
+  color: #51472F;
+}
+
+input, textarea, select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #DED5BC;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  background: #FFFDF7;
+  color: #343127;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: #C69F26;
+  box-shadow: 0 0 0 3px rgba(198,159,38,.13);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 75px;
+}
+
+.section {
+  border-top: 1px solid #EEE7D5;
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #80651A;
+  margin-bottom: 16px;
+}
+
+.option-box {
+  border: 1px solid #E5DDC8;
+  border-radius: 9px;
+  padding: 13px;
+  margin-bottom: 9px;
+  cursor: pointer;
+  background: #FFFEFA;
+  transition: .2s;
+}
+
+.option-box:has(input:checked) {
+  border-color: #C69F26;
+  background: #FBF5E2;
+}
+
+.option-box label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.option-box input {
+  width: auto;
+  accent-color: #C69F26;
+}
+
+.criteria {
+  display: none;
+  background: #F8F4E9;
+  padding: 16px;
+  border-radius: 9px;
+  margin-top: 12px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  margin-top: 18px;
+}
+
+.check-row input {
+  width: auto;
+  accent-color: #C69F26;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 25px;
+}
+
+button {
+  border: 0;
+  border-radius: 9px;
+  padding: 12px 24px;
+  background: #C69F26;
+  color: #FFFFFF;
+  font-weight: 700;
+  cursor: pointer;
+  transition: .2s;
+}
+
+button:hover {
+  background: #A9851D;
+  box-shadow: 0 4px 12px rgba(198,159,38,.2);
+}
+
+button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+#status {
+  display: none;
+  margin-top: 17px;
+  padding: 13px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.error {
+  display: block !important;
+  background: #FFF0ED;
+  color: #A52B2B;
+}
+
+.success {
+  display: block !important;
+  background: #F1F7E9;
+  color: #42652B;
+}
+
+a {
+  color: #967313;
+  font-weight: 600;
+}
+
+@media(max-width: 520px) {
+  body {
+    padding: 10px;
+  }
+
+  .container {
+    padding: 19px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+  </style>
+</head>
+
+<body>
+<div class="container">
+
+  <h2>Buat Google Form Baru</h2>
+  <div class="subtitle">
+    Atur identitas ujian dan metode pemilihan soal.
+  </div>
+
+  <div class="field">
+    <label>Nama Ujian *</label>
+    <input id="formTitle" placeholder="Contoh: Ujian Matematika Kelas X">
+  </div>
+
+  <div class="field">
+    <label>Deskripsi Ujian</label>
+    <textarea id="formDescription"
+      placeholder="Tuliskan petunjuk atau deskripsi ujian..."></textarea>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Metode Pemilihan Soal</div>
+
+    <div class="option-box">
+      <label>
+        <input type="radio" name="method" value="id" checked
+          onchange="showMethod()">
+        Berdasarkan ID soal
+      </label>
+    </div>
+
+    <div class="option-box">
+      <label>
+        <input type="radio" name="method" value="random"
+          onchange="showMethod()">
+        Soal secara acak
+      </label>
+    </div>
+
+    <div class="option-box">
+      <label>
+        <input type="radio" name="method" value="criteria"
+          onchange="showMethod()">
+        Berdasarkan kriteria
+      </label>
+    </div>
+
+    <div id="idBox" class="criteria" style="display:block">
+      <div class="field">
+        <label>ID Soal</label>
+        <textarea id="selectionText"
+          placeholder="Contoh: S001, S002, S003&#10;Gunakan * untuk memilih semua soal"></textarea>
+      </div>
+    </div>
+
+    <div id="randomBox" class="criteria">
+      <div class="field">
+        <label>Jumlah Soal</label>
+        <input type="number" id="randomCount" min="1"
+          placeholder="Masukkan jumlah soal">
+      </div>
+    </div>
+
+    <div id="criteriaBox" class="criteria">
+      <div class="grid">
+        <div class="field">
+          <label>Mata Pelajaran</label>
+          <input id="subject" placeholder="Contoh: Matematika">
+        </div>
+
+        <div class="field">
+          <label>Kelas</label>
+          <input id="grade" placeholder="Contoh: X">
+        </div>
+
+        <div class="field">
+          <label>Materi</label>
+          <input id="material" placeholder="Nama materi">
+        </div>
+
+        <div class="field">
+          <label>Level Bloom</label>
+          <input id="bloom" placeholder="Contoh: C3">
+        </div>
+
+        <div class="field">
+          <label>Level Kognitif</label>
+          <input id="cognitive" placeholder="Contoh: LOTS">
+        </div>
+
+        <div class="field">
+          <label>Jumlah Soal</label>
+          <input type="number" id="criteriaCount" min="1"
+            placeholder="Jumlah soal">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Pengaturan Tambahan</div>
+
+    <label class="check-row">
+      <input type="checkbox" id="shuffleQuestions">
+      Acak urutan soal
+    </label>
+  </div>
+
+  <div class="actions">
+    <button id="submitBtn" onclick="submitForm()">
+      Buat Google Form
+    </button>
+  </div>
+
+  <div id="status"></div>
+
+</div>
+
+<script>
+  function showMethod() {
+    const method = document.querySelector(
+      'input[name="method"]:checked'
+    ).value;
+
+    document.getElementById("idBox").style.display =
+      method === "id" ? "block" : "none";
+
+    document.getElementById("randomBox").style.display =
+      method === "random" ? "block" : "none";
+
+    document.getElementById("criteriaBox").style.display =
+      method === "criteria" ? "block" : "none";
+  }
+
+  function submitForm() {
+    const method = document.querySelector(
+      'input[name="method"]:checked'
+    ).value;
+
+    const data = {
+      formTitle: document.getElementById("formTitle").value.trim(),
+      formDescription: document.getElementById("formDescription").value.trim(),
+      method: method,
+      selectionText: document.getElementById("selectionText").value.trim(),
+      numberOfQuestions: method === "random"
+        ? document.getElementById("randomCount").value
+        : document.getElementById("criteriaCount").value,
+      subject: document.getElementById("subject").value.trim(),
+      grade: document.getElementById("grade").value.trim(),
+      material: document.getElementById("material").value.trim(),
+      bloom: document.getElementById("bloom").value.trim(),
+      cognitive: document.getElementById("cognitive").value.trim(),
+      shuffleQuestions: document.getElementById("shuffleQuestions").checked
+    };
+
+    const status = document.getElementById("status");
+    const button = document.getElementById("submitBtn");
+
+    if (!data.formTitle) {
+      status.className = "error";
+      status.textContent = "Nama ujian wajib diisi.";
+      return;
+    }
+
+    if (method === "id" && !data.selectionText) {
+      status.className = "error";
+      status.textContent = "Masukkan ID soal atau tanda *.";
+      return;
+    }
+
+    if (method !== "id" &&
+        (!data.numberOfQuestions || Number(data.numberOfQuestions) < 1)) {
+      status.className = "error";
+      status.textContent = "Masukkan jumlah soal yang valid.";
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Sedang memproses...";
+    status.className = "";
+    status.style.display = "none";
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        button.disabled = false;
+        button.textContent = "Buat Google Form";
+
+        status.className = "success";
+        status.innerHTML =
+          "Google Form berhasil dibuat.<br>" +
+          "Jumlah soal: " + result.count + "<br>" +
+          '<a href="' + result.editUrl + '" target="_blank">Buka Form untuk diedit</a><br>' +
+          '<a href="' + result.publishedUrl + '" target="_blank">Buka Form untuk peserta</a>';
+      })
+      .withFailureHandler(function(error) {
+        button.disabled = false;
+        button.textContent = "Buat Google Form";
+
+        status.className = "error";
+        status.textContent = error.message || String(error);
+      })
+      .buatGoogleFormDariHTML(data);
+  }
+</script>
+
+</body>
+</html>

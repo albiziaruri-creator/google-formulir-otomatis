@@ -379,307 +379,275 @@ function importSoalWord() {
 // 4. MEMBUAT GOOGLE FORM
 // ==================================================
 
-function buatGoogleForm() {
 
-  const ui = SpreadsheetApp.getUi();
+function buatGoogleFormDariHTML(data) {
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("BANK_SOAL");
 
+  if (!data) {
+    throw new Error("Data dari HTML tidak diterima.");
+  }
+
   if (!sheet) {
-    ui.alert("Sheet BANK_SOAL tidak ditemukan.");
-    return;
+    throw new Error("Sheet BANK_SOAL tidak ditemukan.");
   }
 
   if (sheet.getLastRow() < 2) {
-    ui.alert("BANK_SOAL belum memiliki data soal.");
-    return;
+    throw new Error("BANK_SOAL belum memiliki data soal.");
   }
 
-  // Meminta judul ujian
-  const titleResponse = ui.prompt(
-    "BUAT GOOGLE FORM",
-    "Masukkan judul ujian:",
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (titleResponse.getSelectedButton() !== ui.Button.OK) {
-    return;
-  }
-
-  const formTitle = titleResponse.getResponseText().trim();
+  // Mengambil pengaturan dari HTML
+  const formTitle = String(data.formTitle || "").trim();
+  const formDescription = String(data.formDescription || "").trim();
+  const shuffleQuestions =
+    data.shuffleQuestions === true ||
+    String(data.shuffleQuestions).toLowerCase() === "true";
 
   if (!formTitle) {
-    ui.alert("Judul ujian tidak boleh kosong.");
-    return;
+    throw new Error("Judul ujian tidak boleh kosong.");
   }
-
-  // Meminta deskripsi ujian
-  const descResponse = ui.prompt(
-    "DESKRIPSI UJIAN",
-    "Masukkan petunjuk atau deskripsi ujian:",
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (descResponse.getSelectedButton() !== ui.Button.OK) {
-    return;
-  }
-
-  const formDescription = descResponse.getResponseText().trim();
-  
-  // Memilih pengacakan urutan soal
-  const shuffleChoice = ui.alert(
-    "ACAK URUTAN SOAL",
-    "Apakah urutan pertanyaan akan diacak untuk setiap siswa?",
-    ui.ButtonSet.YES_NO
-  );
-
-  const shuffleQuestions =
-    shuffleChoice === ui.Button.YES;
-
 
   // Membaca kolom A-U
   const values = sheet.getRange(
     2, 1, sheet.getLastRow() - 1, 21
   ).getValues();
 
-  // Mengambil semua soal yang tersedia
   const allQuestions = values.filter(row =>
     String(row[0]).trim() !== "" &&
     String(row[8]).trim() !== ""
   );
 
-  // Memilih metode pengambilan soal
-  const methodChoice = ui.alert(
-    "METODE PEMILIHAN SOAL",
-    "Pilih salah satu:\n\n" +
-    "YA = Berdasarkan ID soal\n" +
-    "TIDAK = Acak dari seluruh BANK_SOAL\n" +
-    "BATAL = Berdasarkan kriteria tertentu",
-    ui.ButtonSet.YES_NO_CANCEL
-  );
+  if (allQuestions.length === 0) {
+    throw new Error("Tidak ada soal valid di BANK_SOAL.");
+  }
 
   let questions = [];
 
   // METODE 1: BERDASARKAN ID
-  if (methodChoice === ui.Button.YES) {
+  if (data.method === "id") {
 
-    const selectionResponse = ui.prompt(
-      "PILIH SOAL",
-      "Masukkan ID soal dipisahkan koma.\n\n" +
-      "Contoh: SOAL001, SOAL002\n\n" +
-      "Ketik * untuk semua soal.",
-      ui.ButtonSet.OK_CANCEL
-    );
-
-    if (selectionResponse.getSelectedButton() !== ui.Button.OK) return;
-
-    const selectionText = selectionResponse.getResponseText().trim();
+    const selectionText = String(data.selectionText || "").trim();
 
     if (!selectionText) {
-      ui.alert("ID soal belum diisi.");
-      return;
+      throw new Error("ID soal belum diisi.");
     }
 
     const selectedIds = selectionText === "*"
       ? null
-      : [...new Set(selectionText.split(",").map(id => id.trim()).filter(Boolean))];
+      : [...new Set(
+          selectionText.split(",")
+            .map(id => id.trim())
+            .filter(Boolean)
+        )];
 
     if (selectedIds !== null) {
-      const existingIds = new Set(allQuestions.map(row => String(row[0]).trim()));
-      const notFound = selectedIds.filter(id => !existingIds.has(id));
+
+      if (selectedIds.length === 0) {
+        throw new Error("Format ID soal tidak valid.");
+      }
+
+      const existingIds = new Set(
+        allQuestions.map(row => String(row[0]).trim())
+      );
+
+      const notFound = selectedIds.filter(
+        id => !existingIds.has(id)
+      );
 
       if (notFound.length > 0) {
-        ui.alert("ID SOAL TIDAK DITEMUKAN:\n\n" + notFound.join("\n"));
-        return;
+        throw new Error(
+          "ID SOAL TIDAK DITEMUKAN:\n" +
+          notFound.join("\n")
+        );
       }
     }
 
     questions = selectedIds === null
       ? [...allQuestions]
-      : allQuestions.filter(row => selectedIds.includes(String(row[0]).trim()));
+      : allQuestions.filter(row =>
+          selectedIds.includes(String(row[0]).trim())
+        );
 
-  // METODE 2: ACAK DARI SEMUA SOAL
-  } else if (methodChoice === ui.Button.NO) {
+  // METODE 2: ACAK
+  } else if (data.method === "random") {
 
-    const numberResponse = ui.prompt(
-      "JUMLAH SOAL ACAK",
-      "Jumlah soal tersedia: " + allQuestions.length +
-      "\nBerapa soal yang ingin diambil?",
-      ui.ButtonSet.OK_CANCEL
+    const numberOfQuestions = Number(
+      data.numberOfQuestions || data.randomCount
     );
 
-    if (numberResponse.getSelectedButton() !== ui.Button.OK) return;
-
-    const numberOfQuestions = Number(numberResponse.getResponseText().trim());
-
-    if (!Number.isInteger(numberOfQuestions) || numberOfQuestions < 1 || numberOfQuestions > allQuestions.length) {
-      ui.alert("Jumlah soal tidak valid.");
-      return;
+    if (
+      !Number.isInteger(numberOfQuestions) ||
+      numberOfQuestions < 1 ||
+      numberOfQuestions > allQuestions.length
+    ) {
+      throw new Error(
+        "Jumlah soal tidak valid. Soal tersedia: " +
+        allQuestions.length
+      );
     }
 
     questions = [...allQuestions];
 
     for (let i = questions.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [questions[i], questions[j]] = [questions[j], questions[i]];
+      [questions[i], questions[j]] =
+        [questions[j], questions[i]];
     }
 
     questions = questions.slice(0, numberOfQuestions);
 
   // METODE 3: BERDASARKAN KRITERIA
-  } else if (methodChoice === ui.Button.CANCEL) {
+  } else if (data.method === "criteria") {
 
-    const askCriterion = (title, message) => {
-      const response = ui.prompt(title, message, ui.ButtonSet.OK_CANCEL);
-      if (response.getSelectedButton() !== ui.Button.OK) return null;
-      return response.getResponseText().trim();
-    };
-
-    const subject = askCriterion("MATA PELAJARAN", "Masukkan mata pelajaran.\nKosongkan jika tidak digunakan.");
-    if (subject === null) return;
-
-    const grade = askCriterion("KELAS", "Masukkan kelas dengan angka Romawi, misalnya VIII.\nKosongkan jika tidak digunakan.");
-    if (grade === null) return;
-
-    const material = askCriterion("MATERI", "Masukkan kata kunci materi.\nKosongkan jika tidak digunakan.");
-    if (material === null) return;
-
-    const bloom = askCriterion("LEVEL BLOOM", "Masukkan C1 sampai C6.\nKosongkan jika tidak digunakan.");
-    if (bloom === null) return;
-
-    const cognitive = askCriterion("LEVEL KOGNITIF", "Masukkan L1, L2, atau L3.\nKosongkan jika tidak digunakan.");
-    if (cognitive === null) return;
+    const subject = String(data.subject || "").trim();
+    const grade = String(data.grade || "").trim();
+    const material = String(data.material || "").trim();
+    const bloom = String(data.bloom || "").trim();
+    const cognitive = String(data.cognitive || "").trim();
 
     const filteredQuestions = allQuestions.filter(row =>
-      (!subject || String(row[2]).trim().toLowerCase() === subject.toLowerCase()) &&
-      (!grade || String(row[3]).trim().toLowerCase() === grade.toLowerCase()) &&
-      (!material || String(row[4]).toLowerCase().includes(material.toLowerCase())) &&
-      (!bloom || String(row[6]).trim().toLowerCase() === bloom.toLowerCase()) &&
-      (!cognitive || String(row[7]).trim().toLowerCase() === cognitive.toLowerCase())
+      (!subject ||
+        String(row[2] || "").trim().toLowerCase() === subject.toLowerCase()) &&
+
+      (!grade ||
+        String(row[3] || "").trim().toLowerCase() === grade.toLowerCase()) &&
+
+      (!material ||
+        String(row[4] || "").trim().toLowerCase().includes(material.toLowerCase())) &&
+
+      (!bloom ||
+        String(row[6] || "").trim().toLowerCase() === bloom.toLowerCase()) &&
+
+      (!cognitive ||
+        String(row[7] || "").trim().toLowerCase() === cognitive.toLowerCase())
     );
 
     if (filteredQuestions.length === 0) {
-      ui.alert("Tidak ada soal yang sesuai dengan kriteria tersebut.");
-      return;
+      throw new Error(
+        "Tidak ada soal yang sesuai dengan kriteria tersebut."
+      );
     }
 
-    const numberResponse = ui.prompt(
-      "JUMLAH SOAL",
-      "Soal yang sesuai kriteria: " + filteredQuestions.length +
-      "\nBerapa soal yang ingin diambil secara acak?",
-      ui.ButtonSet.OK_CANCEL
+    const numberOfQuestions = Number(
+      data.numberOfQuestions || data.criteriaCount
     );
 
-    if (numberResponse.getSelectedButton() !== ui.Button.OK) return;
-
-    const numberOfQuestions = Number(numberResponse.getResponseText().trim());
-
-    if (!Number.isInteger(numberOfQuestions) || numberOfQuestions < 1 || numberOfQuestions > filteredQuestions.length) {
-      ui.alert("Jumlah soal tidak valid. Masukkan angka 1 sampai " + filteredQuestions.length + ".");
-      return;
+    if (
+      !Number.isInteger(numberOfQuestions) ||
+      numberOfQuestions < 1 ||
+      numberOfQuestions > filteredQuestions.length
+    ) {
+      throw new Error(
+        "Jumlah soal tidak valid. Soal sesuai kriteria: " +
+        filteredQuestions.length
+      );
     }
 
     questions = [...filteredQuestions];
 
     for (let i = questions.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [questions[i], questions[j]] = [questions[j], questions[i]];
+      [questions[i], questions[j]] =
+        [questions[j], questions[i]];
     }
 
     questions = questions.slice(0, numberOfQuestions);
 
   } else {
-    return;
+    throw new Error("Metode pemilihan soal tidak dikenal.");
   }
 
   if (questions.length === 0) {
-    ui.alert("Tidak ditemukan soal yang dipilih.");
-    return;
+    throw new Error("Tidak ditemukan soal yang dipilih.");
   }
 
   const plan = [];
   const errors = [];
 
-  // Memvalidasi semua soal sebelum membuat Form
+  // MEMVALIDASI SEMUA SOAL SEBELUM MEMBUAT FORM
   questions.forEach(row => {
 
     const id = String(row[0]).trim();
     const type = String(row[1]).trim().toUpperCase();
     const question = String(row[8]).trim();
     const points = Number(row[17]);
+
     const description = String(row[19] || "").trim();
     const imageId = String(row[20] || "").trim();
 
     const material = String(row[4] || "").trim();
-const objective = String(row[5] || "").trim();
-const bloom = String(row[6] || "").trim();
-const cognitive = String(row[7] || "").trim();
-    
-    Logger.log("ID SOAL: " + id + " | IMAGE ID: " + imageId);
+    const objective = String(row[5] || "").trim();
+    const bloom = String(row[6] || "").trim();
+    const cognitive = String(row[7] || "").trim();
 
     if (!Number.isInteger(points) || points < 0) {
-      errors.push(
-        id + ": POIN harus berupa bilangan bulat lebih dari 0."
-      );
+      errors.push(id + ": POIN harus berupa bilangan bulat minimal 0.");
       return;
     }
 
     const options = [
-      String(row[9]).trim(),
-      String(row[10]).trim(),
-      String(row[11]).trim(),
-      String(row[12]).trim()
+      String(row[9] || "").trim(),
+      String(row[10] || "").trim(),
+      String(row[11] || "").trim(),
+      String(row[12] || "").trim()
     ];
 
-    const key = String(row[13]).trim()
+    const key = String(row[13] || "")
+      .trim()
       .split(",")
       .map(x => x.trim().toUpperCase())
       .filter(Boolean);
 
-if (type === "PG") {
+    // SOAL PILIHAN GANDA
+    if (type === "PG") {
 
-  if (options.some(x => !x)) {
-    errors.push(id + ": Opsi A-D belum lengkap.");
-    return;
-  }
+      if (options.some(x => !x)) {
+        errors.push(id + ": Opsi A-D belum lengkap.");
+        return;
+      }
 
-  if (
-    key.length !== 1 ||
-    !["A", "B", "C", "D"].includes(key[0])
-  ) {
-    errors.push(id + ": Kunci PG tidak valid.");
-    return;
-  }
+      if (
+        key.length !== 1 ||
+        !["A", "B", "C", "D"].includes(key[0])
+      ) {
+        errors.push(id + ": Kunci PG tidak valid.");
+        return;
+      }
 
-  plan.push({
-    id, type, question, points, material, objective, bloom, cognitive,
-    description, options, key, imageId
-  });
+      plan.push({
+        id, type, question, points,
+        material, objective, bloom, cognitive,
+        description, options, key, imageId
+      });
 
-} else if (type === "PGK") {
+    // SOAL PILIHAN GANDA KOMPLEKS
+    } else if (type === "PGK") {
 
-  if (options.some(x => !x)) {
-    errors.push(id + ": Opsi A-D belum lengkap.");
-    return;
-  }
+      if (options.some(x => !x)) {
+        errors.push(id + ": Opsi A-D belum lengkap.");
+        return;
+      }
 
-  if (
-    key.length < 2 ||
-    key.some(x => !["A", "B", "C", "D"].includes(x)) ||
-    new Set(key).size !== key.length
-  ) {
-    errors.push(id + ": Kunci PGK tidak valid.");
-    return;
-  }
+      if (
+        key.length < 2 ||
+        key.some(x => !["A", "B", "C", "D"].includes(x)) ||
+        new Set(key).size !== key.length
+      ) {
+        errors.push(id + ": Kunci PGK tidak valid.");
+        return;
+      }
 
-  plan.push({
-    id, type, question, points, material, objective, bloom, cognitive,
-    description, options, key, imageId
-  });
+      plan.push({
+        id, type, question, points,
+        material, objective, bloom, cognitive,
+        description, options, key, imageId
+      });
 
+    // SOAL MENJODOHKAN
     } else if (type === "MJ") {
 
-      const rawPairs = String(row[15]).trim();
+      const rawPairs = String(row[15] || "").trim();
 
       if (!rawPairs) {
         errors.push(id + ": Data PASANGAN kosong.");
@@ -726,35 +694,42 @@ if (type === "PG") {
       }
 
       plan.push({
-        id, type, question, points, material, objective, bloom, cognitive,
+        id, type, question, points,
+        material, objective, bloom, cognitive,
         description, pairs, rightOptions
       });
 
+    // SOAL ISIAN SINGKAT
     } else if (type === "IS") {
 
-  if (!String(row[14]).trim()) {
-    errors.push(id + ": JAWABAN_DITERIMA kosong.");
-    return;
-  }
+      const accepted = String(row[14] || "").trim();
 
-  plan.push({
-    id, type, question, points, material, objective, bloom, cognitive,
-    description,
-    accepted: String(row[14] || "").trim()
-  });
+      if (!accepted) {
+        errors.push(id + ": JAWABAN_DITERIMA kosong.");
+        return;
+      }
 
+      plan.push({
+        id, type, question, points,
+        material, objective, bloom, cognitive,
+        description, accepted
+      });
+
+    // SOAL URAIAN
     } else if (type === "UR") {
 
-      if (!String(row[16]).trim()) {
+      const rubric = String(row[16] || "").trim();
+
+      if (!rubric) {
         errors.push(id + ": RUBRIK kosong.");
         return;
       }
 
-     plan.push({
-  id, type, question, points, material, objective, bloom, cognitive,
-  description,
-  rubric: String(row[16] || "").trim()
-});
+      plan.push({
+        id, type, question, points,
+        material, objective, bloom, cognitive,
+        description, rubric
+      });
 
     } else {
 
@@ -763,38 +738,25 @@ if (type === "PG") {
     }
 
   });
-if (plan.length === 0) {
-  ui.alert("Tidak ada soal yang valid untuk dibuat menjadi Google Form.");
-  return;
-}
 
-  if (errors.length > 0) {
-    ui.alert(
-      "GOOGLE FORM BELUM DIBUAT\n\n" +
-      errors.join("\n")
+  if (plan.length === 0) {
+    throw new Error(
+      "Tidak ada soal yang valid untuk dibuat menjadi Google Form."
     );
-    return;
   }
 
-  // Konfirmasi pembuatan Form
-  const confirm = ui.alert(
-    "KONFIRMASI",
-    "Jumlah soal: " + plan.length +
-    "\n\nGoogle Form baru akan dibuat." +
-    "\nForm akan terhubung dengan spreadsheet ini." +
-    "\n\nLanjutkan?",
-    ui.ButtonSet.YES_NO
-  );
-
-  if (confirm !== ui.Button.YES) {
-    return;
+  if (errors.length > 0) {
+    throw new Error(
+      "GOOGLE FORM BELUM DIBUAT:\n\n" +
+      errors.join("\n")
+    );
   }
 
   let form = null;
 
   try {
 
-    // Membuat Google Form
+    // MEMBUAT GOOGLE FORM
     form = FormApp.create(formTitle);
 
     form.setIsQuiz(true);
@@ -803,9 +765,9 @@ if (plan.length === 0) {
       "Jawaban kamu sudah berhasil dikirim."
     );
     form.setProgressBar(true);
-    form.setShuffleQuestions(false);
-    
-    // Identitas peserta
+    form.setShuffleQuestions(shuffleQuestions);
+
+    // IDENTITAS PESERTA
     form.addTextItem()
       .setTitle("Nama Lengkap")
       .setRequired(true);
@@ -817,87 +779,64 @@ if (plan.length === 0) {
     form.addTextItem()
       .setTitle("Nomor Absen")
       .setRequired(true);
-      
-    // Memisahkan halaman identitas dan halaman ujian
+
+    // MEMISAHKAN HALAMAN IDENTITAS DAN HALAMAN UJIAN
     form.addPageBreakItem()
       .setTitle("SOAL UJIAN")
       .setHelpText("Kerjakan semua pertanyaan dengan teliti.");
 
+
+    // Menyiapkan penampung pemetaan soal
+    const mappingRows = [];
+    let nomorItem = 0;
+
     // Membuat soal
-    // Mengacak urutan soal melalui Apps Script
-if (shuffleQuestions) {
-  for (let i = plan.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [plan[i], plan[j]] = [plan[j], plan[i]];
-  }
-}
+    plan.forEach(q => {
 
-// Menyiapkan penampung pemetaan soal
-const mappingRows = [];
-let nomorItem = 0;
+      // Menambahkan gambar jika tersedia
+      if (q.imageId) {
+        const imageFile = DriveApp.getFileById(q.imageId);
 
-// Membuat soal
-plan.forEach(q => {
+        form.addImageItem()
+          .setTitle("Gambar soal " + q.id)
+          .setImage(imageFile.getBlob())
+          .setAlignment(FormApp.Alignment.CENTER)
+          .setWidth(500);
+      }
 
+      // SOAL PILIHAN GANDA
       if (q.type === "PG") {
-                // Menambahkan gambar jika tersedia
-        if (q.imageId) {
-          const imageFile = DriveApp.getFileById(q.imageId);
-          const imageItem = form.addImageItem();
 
-          imageItem
-            .setTitle("Gambar soal " + q.id)
-            .setImage(imageFile.getBlob())
-            .setAlignment(FormApp.Alignment.CENTER)
-            .setWidth(500);
-        }
         const item = form.addMultipleChoiceItem();
-
         item.setTitle(q.question);
 
-        // Deskripsi berada di dalam petak soal
         if (q.description) {
           item.setHelpText(q.description);
         }
 
         const choices = q.options.map((option, index) => {
-
-  const letter = String.fromCharCode(65 + index);
-
-  return item.createChoice(
-    option,
-    q.key[0] === letter
-  );
-
-});
+          const letter = String.fromCharCode(65 + index);
+          return item.createChoice(option, q.key[0] === letter);
+        });
 
         item.setChoices(choices);
         item.setPoints(q.points);
         item.setRequired(true);
-        // Mencatat pemetaan soal PG
-nomorItem++;
 
-mappingRows.push([
-  q.id,
-  item.getId(),
-  nomorItem,
-  "",
-  q.type,
-  q.question,
-  q.points,
-  JSON.stringify(q.key),
-  "",
-  "",
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "DINILAI_OTOMATIS"
-]);
+        nomorItem++;
 
+        mappingRows.push([
+          q.id, item.getId(), nomorItem, "",
+          q.type, q.question, q.points,
+          JSON.stringify(q.key), "", "",
+          q.material, q.bloom, q.cognitive,
+          "DINILAI_OTOMATIS"
+        ]);
+
+      // SOAL PILIHAN GANDA KOMPLEKS
       } else if (q.type === "PGK") {
 
         const item = form.addCheckboxItem();
-
         item.setTitle(q.question);
 
         if (q.description) {
@@ -905,42 +844,30 @@ mappingRows.push([
         }
 
         const choices = q.options.map((option, index) => {
-
-  const letter = String.fromCharCode(65 + index);
-
-  return item.createChoice(
-    option,
-    q.key.includes(letter)
-  );
-
-});
+          const letter = String.fromCharCode(65 + index);
+          return item.createChoice(option, q.key.includes(letter));
+        });
 
         item.setChoices(choices);
         item.setPoints(q.points);
         item.setRequired(true);
 
-        // Mencatat pemetaan soal PGK
-nomorItem++;
+        nomorItem++;
 
-mappingRows.push([
-  q.id,
-  item.getId(),
-  nomorItem,
-  "",
-  q.type,
-  q.question,
-  q.points,
-  JSON.stringify(
-    q.key.map(letter => q.options[letter.charCodeAt(0) - 65])
-  ),
-  "",
-  "",
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "DINILAI_OTOMATIS"
-]);
+        mappingRows.push([
+          q.id, item.getId(), nomorItem, "",
+          q.type, q.question, q.points,
+          JSON.stringify(
+            q.key.map(letter =>
+              q.options[letter.charCodeAt(0) - 65]
+            )
+          ),
+          "", "",
+          q.material, q.bloom, q.cognitive,
+          "DINILAI_OTOMATIS"
+        ]);
 
+      // SOAL MENJODOHKAN
       } else if (q.type === "MJ") {
 
         const quotient = Math.floor(q.points / q.pairs.length);
@@ -956,48 +883,38 @@ mappingRows.push([
             ": " + pair.left
           );
 
-          // Deskripsi berada di dalam setiap petak pasangan
           if (q.description) {
             item.setHelpText(q.description);
           }
 
           const choices = q.rightOptions.map(option =>
-            item.createChoice(
-              option,
-              option === pair.right
-            )
+            item.createChoice(option, option === pair.right)
           );
 
           item.setChoices(choices);
-          item.setPoints(
-            quotient + (index < remainder ? 1 : 0)
-          );
-          item.setRequired(true);
-// Mencatat pemetaan setiap pasangan MJ
-nomorItem++;
 
-mappingRows.push([
-  q.id,
-  item.getId(),
-  nomorItem,
-  index + 1,
-  q.type,
-  q.question + " - " + pair.left,
-  quotient + (index < remainder ? 1 : 0),
-  JSON.stringify(pair.right),
-  "",
-  "",
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "DINILAI_OTOMATIS"
-]);
+          const pairPoints =
+            quotient + (index < remainder ? 1 : 0);
+
+          item.setPoints(pairPoints);
+          item.setRequired(true);
+
+          nomorItem++;
+
+          mappingRows.push([
+            q.id, item.getId(), nomorItem, index + 1,
+            q.type, q.question + " - " + pair.left,
+            pairPoints, JSON.stringify(pair.right), "", "",
+            q.material, q.bloom, q.cognitive,
+            "DINILAI_OTOMATIS"
+          ]);
+
         });
 
+      // SOAL ISIAN SINGKAT
       } else if (q.type === "IS") {
 
         const item = form.addTextItem();
-
         item.setTitle(q.question);
 
         item.setHelpText(
@@ -1008,30 +925,20 @@ mappingRows.push([
         item.setPoints(q.points);
         item.setRequired(true);
 
-        // Mencatat pemetaan soal IS
-nomorItem++;
+        nomorItem++;
 
-mappingRows.push([
-  q.id,
-  item.getId(),
-  nomorItem,
-  "",
-  q.type,
-  q.question,
-  q.points,
-  "",
-  JSON.stringify([q.accepted]),
-  "",
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "PERLU_PENILAIAN_GURU"
-]);
+        mappingRows.push([
+          q.id, item.getId(), nomorItem, "",
+          q.type, q.question, q.points,
+          "", JSON.stringify([q.accepted]), "",
+          q.material, q.bloom, q.cognitive,
+          "PERLU_PENILAIAN_GURU"
+        ]);
 
+      // SOAL URAIAN
       } else if (q.type === "UR") {
 
         const item = form.addParagraphTextItem();
-
         item.setTitle(q.question);
 
         item.setHelpText(
@@ -1042,32 +949,35 @@ mappingRows.push([
         item.setPoints(q.points);
         item.setRequired(true);
 
-        // Mencatat pemetaan soal UR
-nomorItem++;
+        nomorItem++;
 
-mappingRows.push([
-  q.id,
-  item.getId(),
-  nomorItem,
-  "",
-  q.type,
-  q.question,
-  q.points,
-  "",
-  "",
-  JSON.stringify(q.rubric),
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "PERLU_PENILAIAN_GURU"
-]);}
+        mappingRows.push([
+          q.id, item.getId(), nomorItem, "",
+          q.type, q.question, q.points,
+          "", "", JSON.stringify(q.rubric),
+          q.material, q.bloom, q.cognitive,
+          "PERLU_PENILAIAN_GURU"
+        ]);
 
-    });
+      }
+
+    }); // Menutup plan.forEach()
 
     // Membuat kisi-kisi berdasarkan soal yang digunakan
-buatKisiKisi_(plan);
+    buatKisiKisi_(plan);
 
-    
+    // Memastikan sheet pemetaan tersedia
+    const pemetaanSheet = ss.getSheetByName("PEMETAAN_SOAL_UJIAN");
+    if (!pemetaanSheet) {
+      throw new Error("Sheet PEMETAAN_SOAL_UJIAN tidak ditemukan.");
+    }
+
+    // Memastikan sheet daftar ujian tersedia
+    const daftarUjian = ss.getSheetByName("DAFTAR_UJIAN");
+    if (!daftarUjian) {
+      throw new Error("Sheet DAFTAR_UJIAN tidak ditemukan.");
+    }
+
     // Mencatat daftar sheet sebelum menghubungkan respons
     const sheetNamesBefore = ss.getSheets().map(
       s => s.getName()
@@ -1092,28 +1002,23 @@ buatKisiKisi_(plan);
 
     // Membuat ID ujian unik
     const idUjian = "UJIAN-" + Utilities.getUuid();
-// Menyimpan pemetaan setiap soal ke spreadsheet
-const pemetaanSheet = ss.getSheetByName("PEMETAAN_SOAL_UJIAN");
-if (!pemetaanSheet) {
-  throw new Error("Sheet PEMETAAN_SOAL_UJIAN tidak ditemukan.");
-}
-const mappingData = mappingRows.map(row => [
-  idUjian,
-  ...row
-]);
 
-if (mappingData.length > 0) {
-  pemetaanSheet.getRange(
-    pemetaanSheet.getLastRow() + 1,
-    1,
-    mappingData.length,
-    15
-  ).setValues(mappingData);
-}
+    // Menyimpan pemetaan setiap soal ke spreadsheet
+    const mappingData = mappingRows.map(row => [
+      idUjian,
+      ...row
+    ]);
+
+    if (mappingData.length > 0) {
+      pemetaanSheet.getRange(
+        pemetaanSheet.getLastRow() + 1,
+        1,
+        mappingData.length,
+        15
+      ).setValues(mappingData);
+    }
 
     // Menyimpan identitas ujian
-    const daftarUjian = ss.getSheetByName("DAFTAR_UJIAN");
-
     daftarUjian.appendRow([
       idUjian,
       formTitle,
@@ -1127,32 +1032,26 @@ if (mappingData.length > 0) {
       "DIBUAT"
     ]);
 
-
-    // Menampilkan tautan
-    ui.alert(
-      "GOOGLE FORM BERHASIL DIBUAT\n\n" +
-      "Jumlah soal: " + plan.length +
-      "\n\nLINK UNTUK MENGEDIT:\n" +
-      form.getEditUrl() +
-      "\n\nLINK UNTUK PESERTA:\n" +
-      form.getPublishedUrl()
-    );
+    // Mengirim hasil pembuatan Form ke HTML
+    return {
+      success: true,
+      count: plan.length,
+      editUrl: form.getEditUrl(),
+      publishedUrl: form.getPublishedUrl()
+    };
 
   } catch (error) {
 
-    ui.alert(
-      "GAGAL MEMBUAT GOOGLE FORM\n\n" +
+    throw new Error(
+      "GAGAL MEMBUAT GOOGLE FORM:\n\n" +
       error.message +
       (form
-        ? "\n\nPeriksa Drive. Form yang dibuat sebagian mungkin masih tersimpan."
+        ? "\n\nForm mungkin sudah dibuat sebagian. Periksa Google Drive."
         : "")
     );
 
   }
-
 }
-
-
 
 function buatKisiKisi_(questions) {
 
@@ -1210,678 +1109,763 @@ function buatKisiKisi_(questions) {
   }
 
 }
+
 function tambahSoalKeForm() {
 
   const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  const response = ui.prompt(
-    "TAMBAH SOAL KE FORM",
-    "Masukkan link Google Form yang ingin ditambahkan soal:",
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (response.getSelectedButton() !== ui.Button.OK) {
-    return;
-  }
-
-  const formUrl = response.getResponseText().trim();
-
-  const match = formUrl.match(/[-\w]{25,}/);
-
-  if (!match) {
-    ui.alert("Link atau ID Google Form tidak valid.");
-    return;
-  }
+  let form = null;
+  let itemsAdded = 0;
 
   try {
 
-    const form = FormApp.openById(match[0]);
-    
-    if (!form.isQuiz()) {
-  throw new Error(
-    "Form tujuan belum diaktifkan sebagai kuis. Gunakan Form hasil generator."
-  );
-}
-
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    // MENYIAPKAN LOG SOAL YANG SUDAH DITAMBAHKAN
-let logSheet = ss.getSheetByName("LOG_SOAL_FORM");
-
-if (!logSheet) {
-  logSheet = ss.insertSheet("LOG_SOAL_FORM");
-
-  logSheet.appendRow([
-    "FORM_ID",
-    "ID_SOAL",
-    "TANGGAL_DITAMBAHKAN"
-  ]);
-}
-
-const logData = logSheet.getDataRange().getValues();
-
-const loggedIds = new Set(
-  logData.slice(1)
-    .filter(row => String(row[0]) === match[0])
-    .map(row => String(row[1]).trim())
-);
-const sheet = ss.getSheetByName("BANK_SOAL");
-
-if (!sheet) {
-  throw new Error("Sheet BANK_SOAL tidak ditemukan.");
-}
-
-if (sheet.getLastRow() < 2) {
-  throw new Error("BANK_SOAL belum memiliki data soal.");
-}
-
-const values = sheet.getRange(
-  2, 1, sheet.getLastRow() - 1, 21
-).getValues();
-
-const allQuestions = values.filter(row =>
-  String(row[0]).trim() !== "" &&
-  String(row[8]).trim() !== ""
-);
-
-const methodChoice = ui.alert(
-  "METODE PEMILIHAN SOAL",
-  "Pilih metode pengambilan soal:\n\n" +
-  "YA = Berdasarkan ID soal\n" +
-  "TIDAK = Acak dari seluruh BANK_SOAL\n" +
-  "BATAL = Berdasarkan kriteria tertentu",
-  ui.ButtonSet.YES_NO_CANCEL
-);
-
-let questions = [];
-
-// METODE 1: BERDASARKAN ID
-if (methodChoice === ui.Button.YES) {
-
-  const response = ui.prompt(
-    "PILIH SOAL",
-    "Masukkan ID soal dipisahkan koma.\n" +
-    "Contoh: SOAL001, SOAL002\n\n" +
-    "Ketik * untuk semua soal.",
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (response.getSelectedButton() !== ui.Button.OK) return;
-
-  const selectionText = response.getResponseText().trim();
-
-  if (!selectionText) {
-    ui.alert("ID soal belum diisi.");
-    return;
-  }
-
-  const selectedIds = selectionText === "*"
-    ? null
-    : [...new Set(selectionText.split(",").map(id => id.trim()).filter(Boolean))];
-
-  if (selectedIds !== null) {
-    const existingIds = new Set(
-      allQuestions.map(row => String(row[0]).trim())
+    // MEMINTA LINK GOOGLE FORM
+    const response = ui.prompt(
+      "TAMBAH SOAL KE FORM",
+      "Masukkan link Google Form yang ingin ditambahkan soal:",
+      ui.ButtonSet.OK_CANCEL
     );
 
-    const notFound = selectedIds.filter(id => !existingIds.has(id));
+    if (response.getSelectedButton() !== ui.Button.OK) return;
 
-    if (notFound.length > 0) {
-      ui.alert("ID SOAL TIDAK DITEMUKAN:\n\n" + notFound.join("\n"));
-      return;
+    const formUrl = response.getResponseText().trim();
+    const match = formUrl.match(/[-\w]{25,}/);
+
+    if (!match) {
+      throw new Error("Link atau ID Google Form tidak valid.");
     }
-  }
 
-  questions = selectedIds === null
-    ? [...allQuestions]
-    : allQuestions.filter(row =>
-        selectedIds.includes(String(row[0]).trim())
+    // MEMBUKA GOOGLE FORM
+    form = FormApp.openById(match[0]);
+
+    if (!form.isQuiz()) {
+      throw new Error(
+        "Form tujuan belum diaktifkan sebagai kuis."
+      );
+    }
+
+    // MENCARI ID_UJIAN
+    const examSheet = ss.getSheetByName("DAFTAR_UJIAN");
+
+    if (!examSheet) {
+      throw new Error("Sheet DAFTAR_UJIAN tidak ditemukan.");
+    }
+
+    const examData = examSheet.getDataRange().getValues();
+
+    const examRow = examData.slice(1).find(row =>
+      String(row[2]).trim() === match[0]
+    );
+
+    if (!examRow) {
+      throw new Error(
+        "Google Form belum terdaftar di DAFTAR_UJIAN."
+      );
+    }
+
+    const idUjian = String(examRow[0]).trim();
+
+    // MEMERIKSA SHEET PEMETAAN
+    const mappingSheet = ss.getSheetByName(
+      "PEMETAAN_SOAL_UJIAN"
+    );
+
+    if (!mappingSheet) {
+      throw new Error(
+        "Sheet PEMETAAN_SOAL_UJIAN tidak ditemukan."
+      );
+    }
+
+    // MENYIAPKAN LOG SOAL
+    let logSheet = ss.getSheetByName("LOG_SOAL_FORM");
+
+    if (!logSheet) {
+      logSheet = ss.insertSheet("LOG_SOAL_FORM");
+
+      logSheet.appendRow([
+        "FORM_ID",
+        "ID_SOAL",
+        "TANGGAL_DITAMBAHKAN"
+      ]);
+    }
+
+    const logData = logSheet.getDataRange().getValues();
+
+    const loggedIds = new Set(
+      logData.slice(1)
+        .filter(row => String(row[0]).trim() === match[0])
+        .map(row => String(row[1]).trim())
+    );
+
+    // MEMBACA BANK SOAL
+    const sheet = ss.getSheetByName("BANK_SOAL");
+
+    if (!sheet) {
+      throw new Error("Sheet BANK_SOAL tidak ditemukan.");
+    }
+
+    if (sheet.getLastRow() < 2) {
+      throw new Error("BANK_SOAL belum memiliki data soal.");
+    }
+
+    const values = sheet.getRange(
+      2, 1, sheet.getLastRow() - 1, 21
+    ).getValues();
+
+    const allQuestions = values.filter(row =>
+      String(row[0]).trim() !== "" &&
+      String(row[8]).trim() !== ""
+    );
+
+    if (allQuestions.length === 0) {
+      throw new Error("Tidak ada soal dalam BANK_SOAL.");
+    }
+
+    // MEMILIH METODE PENGAMBILAN SOAL
+    const methodChoice = ui.alert(
+      "METODE PEMILIHAN SOAL",
+      "Pilih metode pengambilan soal:\n\n" +
+      "YA = Berdasarkan ID soal\n" +
+      "TIDAK = Acak dari seluruh BANK_SOAL\n" +
+      "BATAL = Berdasarkan kriteria tertentu",
+      ui.ButtonSet.YES_NO_CANCEL
+    );
+
+    let questions = [];
+
+    // METODE 1: BERDASARKAN ID
+    if (methodChoice === ui.Button.YES) {
+
+      const response = ui.prompt(
+        "PILIH SOAL",
+        "Masukkan ID soal dipisahkan koma.\n" +
+        "Contoh: SOAL001, SOAL002\n\n" +
+        "Ketik * untuk semua soal.",
+        ui.ButtonSet.OK_CANCEL
       );
 
-// METODE 2: ACAK
-} else if (methodChoice === ui.Button.NO) {
+      if (response.getSelectedButton() !== ui.Button.OK) return;
 
-  const response = ui.prompt(
-    "JUMLAH SOAL ACAK",
-    "Jumlah soal tersedia: " + allQuestions.length +
-    "\nBerapa soal yang ingin ditambahkan?",
-    ui.ButtonSet.OK_CANCEL
-  );
+      const selectionText = response.getResponseText().trim();
 
-  if (response.getSelectedButton() !== ui.Button.OK) return;
-
-  const numberOfQuestions = Number(response.getResponseText().trim());
-
-  if (
-    !Number.isInteger(numberOfQuestions) ||
-    numberOfQuestions < 1 ||
-    numberOfQuestions > allQuestions.length
-  ) {
-    ui.alert("Jumlah soal tidak valid.");
-    return;
-  }
-
-  questions = [...allQuestions];
-
-  for (let i = questions.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [questions[i], questions[j]] = [questions[j], questions[i]];
-  }
-
-  questions = questions.slice(0, numberOfQuestions);
-
-// METODE 3: KRITERIA
-} else if (methodChoice === ui.Button.CANCEL) {
-
-  const askCriterion = (title, message) => {
-    const response = ui.prompt(title, message, ui.ButtonSet.OK_CANCEL);
-    if (response.getSelectedButton() !== ui.Button.OK) return null;
-    return response.getResponseText().trim();
-  };
-
-  const subject = askCriterion(
-    "MATA PELAJARAN",
-    "Masukkan mata pelajaran. Kosongkan jika tidak digunakan."
-  );
-  if (subject === null) return;
-
-  const grade = askCriterion(
-    "KELAS",
-    "Masukkan kelas, misalnya VIII. Kosongkan jika tidak digunakan."
-  );
-  if (grade === null) return;
-
-  const material = askCriterion(
-    "MATERI",
-    "Masukkan kata kunci materi. Kosongkan jika tidak digunakan."
-  );
-  if (material === null) return;
-
-  const bloom = askCriterion(
-    "LEVEL BLOOM",
-    "Masukkan C1 sampai C6. Kosongkan jika tidak digunakan."
-  );
-  if (bloom === null) return;
-
-  const cognitive = askCriterion(
-    "LEVEL KOGNITIF",
-    "Masukkan L1, L2, atau L3. Kosongkan jika tidak digunakan."
-  );
-  if (cognitive === null) return;
-
-  const filteredQuestions = allQuestions.filter(row =>
-    (!subject || String(row[2]).trim().toLowerCase() === subject.toLowerCase()) &&
-    (!grade || String(row[3]).trim().toLowerCase() === grade.toLowerCase()) &&
-    (!material || String(row[4]).toLowerCase().includes(material.toLowerCase())) &&
-    (!bloom || String(row[6]).trim().toLowerCase() === bloom.toLowerCase()) &&
-    (!cognitive || String(row[7]).trim().toLowerCase() === cognitive.toLowerCase())
-  );
-
-  if (filteredQuestions.length === 0) {
-    ui.alert("Tidak ada soal yang sesuai dengan kriteria.");
-    return;
-  }
-
-  const response = ui.prompt(
-    "JUMLAH SOAL",
-    "Soal yang sesuai: " + filteredQuestions.length +
-    "\nBerapa soal yang ingin ditambahkan secara acak?",
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (response.getSelectedButton() !== ui.Button.OK) return;
-
-  const numberOfQuestions = Number(response.getResponseText().trim());
-
-  if (
-    !Number.isInteger(numberOfQuestions) ||
-    numberOfQuestions < 1 ||
-    numberOfQuestions > filteredQuestions.length
-  ) {
-    ui.alert("Jumlah soal tidak valid.");
-    return;
-  }
-
-  questions = [...filteredQuestions];
-
-  for (let i = questions.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [questions[i], questions[j]] = [questions[j], questions[i]];
-  }
-
-  questions = questions.slice(0, numberOfQuestions);
-
-} else {
-  return;
-}
-
-if (questions.length === 0) {
-  ui.alert("Tidak ada soal yang dipilih.");
-  return;
-}
-// MEMERIKSA SOAL YANG SUDAH PERNAH DITAMBAHKAN
-const alreadyAdded = questions
-  .map(row => String(row[0]).trim())
-  .filter(id => loggedIds.has(id));
-
-if (alreadyAdded.length > 0) {
-  ui.alert(
-    "SOAL SUDAH PERNAH DITAMBAHKAN",
-    "ID berikut sudah ada di Form tujuan:\n\n" +
-    alreadyAdded.join("\n") +
-    "\n\nPilih soal lain.",
-    ui.ButtonSet.OK
-  );
-  return;
-}
-
-ui.alert(
-  "PEMILIHAN SOAL BERHASIL\n\n" +
-  "Form tujuan: " + form.getTitle() +
-  "\nJumlah soal terpilih: " + questions.length
-);
-// MEMVALIDASI SOAL TERPILIH
-const plan = [];
-const errors = [];
-
-questions.forEach(row => {
-
-  const id = String(row[0]).trim();
-  const type = String(row[1]).trim().toUpperCase();
-  const question = String(row[8]).trim();
-  const points = Number(row[17]);
-  const description = String(row[19] || "").trim();
-  const imageId = String(row[20] || "").trim();
-
-  const material = String(row[4] || "").trim();
-  const objective = String(row[5] || "").trim();
-  const bloom = String(row[6] || "").trim();
-  const cognitive = String(row[7] || "").trim();
-
-  if (!Number.isInteger(points) || points <= 0) {
-    errors.push(id + ": Poin tidak valid.");
-    return;
-  }
-
-  const options = [
-    String(row[9]).trim(),
-    String(row[10]).trim(),
-    String(row[11]).trim(),
-    String(row[12]).trim()
-  ];
-
-  const key = String(row[13]).trim()
-    .split(",")
-    .map(x => x.trim().toUpperCase())
-    .filter(Boolean);
-
-  if (type === "PG" || type === "PGK") {
-
-    if (options.some(x => !x)) {
-      errors.push(id + ": Opsi A-D belum lengkap.");
-      return;
-    }
-
-    if (
-      (type === "PG" && (
-        key.length !== 1 ||
-        !["A", "B", "C", "D"].includes(key[0])
-      )) ||
-      (type === "PGK" && (
-        key.length < 2 ||
-        key.some(x => !["A", "B", "C", "D"].includes(x)) ||
-        new Set(key).size !== key.length
-      ))
-    ) {
-      errors.push(id + ": Kunci jawaban tidak valid.");
-      return;
-    }
-
-    plan.push({
-      id, type, question, points, material, objective, bloom, cognitive,
-      description,
-      accepted: String(row[14] || "").trim()
-});
-
-  } else if (type === "MJ") {
-
-    const rawPairs = String(row[15]).trim();
-
-    if (!rawPairs) {
-      errors.push(id + ": Data pasangan kosong.");
-      return;
-    }
-
-    const pairs = rawPairs.split(";").map(pair => {
-      const parts = pair.split("=");
-
-      if (parts.length < 2) return null;
-
-      return {
-        left: parts[0].trim(),
-        right: parts.slice(1).join("=").trim()
-      };
-    });
-
-    if (pairs.some(p => !p || !p.left || !p.right)) {
-      errors.push(id + ": Format pasangan tidak valid.");
-      return;
-    }
-
-    const rightOptions = [...new Set(pairs.map(p => p.right))];
-
-    if (
-      rightOptions.length !== pairs.length ||
-      points < pairs.length
-    ) {
-      errors.push(id + ": Pasangan atau poin tidak valid.");
-      return;
-    }
-
-    plan.push({
-      id, type, question, points,
-      material, objective, bloom, cognitive,
-      description, pairs, rightOptions
-    });
-
-  } else if (type === "IS") {
-
-    if (!String(row[14]).trim()) {
-      errors.push(id + ": Jawaban diterima kosong.");
-      return;
-    }
-
-    plan.push({
-      id, type, question, points,
-      material, objective, bloom, cognitive,
-      description
-    });
-
-  } else if (type === "UR") {
-
-    if (!String(row[16]).trim()) {
-      errors.push(id + ": Rubrik kosong.");
-      return;
-    }
-
-    plan.push({
-      id, type, question, points, material, objective, bloom, cognitive,
-      description,
-      rubric: String(row[16] || "").trim()
-});
-
-  } else {
-
-    errors.push(id + ": Jenis soal tidak dikenal.");
-
-  }
-
-});
-
-if (errors.length > 0) {
-  ui.alert(
-    "VALIDASI GAGAL\n\n" +
-    errors.join("\n")
-  );
-  return;
-}
-
-ui.alert(
-  "VALIDASI BERHASIL\n\n" +
-  "Jumlah soal siap ditambahkan: " + plan.length
-);
-
-// KONFIRMASI PENAMBAHAN SOAL
-const confirm = ui.alert(
-  "KONFIRMASI PENAMBAHAN",
-  "Form tujuan: " + form.getTitle() +
-  "\nJumlah soal: " + plan.length +
-  "\n\nSoal akan ditambahkan di bagian akhir Form." +
-  "\nSoal dan respons lama tetap dipertahankan." +
-  "\n\nLanjutkan?",
-  ui.ButtonSet.YES_NO
-);
-
-if (confirm !== ui.Button.YES) return;
-
-// MENAMBAHKAN SOAL KE FORM
-plan.forEach(q => {
-
-  if (q.type === "PG") {
-
-    if (q.imageId) {
-      const imageFile = DriveApp.getFileById(q.imageId);
-
-      form.addImageItem()
-        .setTitle("Gambar soal")
-        .setImage(imageFile.getBlob())
-        .setAlignment(FormApp.Alignment.CENTER)
-        .setWidth(500);
-    }
-
-    const item = form.addMultipleChoiceItem();
-
-    item.setTitle(q.question);
-
-    if (q.description) {
-      item.setHelpText(q.description);
-    }
-
-    const choices = q.options.map((option, index) => {
-      const letter = String.fromCharCode(65 + index);
-      return item.createChoice(option, q.key[0] === letter);
-    });
-
-    item.setChoices(choices);
-    item.setPoints(q.points);
-    item.setRequired(true);
-
-    mappingRows.push([
-  q.id,
-  item.getId(),
-  ++nomorItem,
-  "",
-  q.type,
-  q.question,
-  q.points,
-  JSON.stringify([
-    q.options[q.key[0].charCodeAt(0) - 65]
-  ]),
-  "",
-  "",
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "OTOMATIS"
-]);
-
-  } else if (q.type === "PGK") {
-
-    const item = form.addCheckboxItem();
-
-    item.setTitle(q.question);
-
-    if (q.description) {
-      item.setHelpText(q.description);
-    }
-
-    const choices = q.options.map((option, index) => {
-      const letter = String.fromCharCode(65 + index);
-      return item.createChoice(option, q.key.includes(letter));
-    });
-
-    item.setChoices(choices);
-    item.setPoints(q.points);
-    item.setRequired(true);
- mappingRows.push([
-  q.id,
-  item.getId(),
-  ++nomorItem,
-  "",
-  q.type,
-  q.question,
-  q.points,
-  JSON.stringify(
-    q.key.map(letter =>
-      q.options[letter.charCodeAt(0) - 65]
-    )
-  ),
-  "",
-  "",
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "OTOMATIS"
-]);
-
-  } else if (q.type === "MJ") {
-
-    const quotient = Math.floor(q.points / q.pairs.length);
-    const remainder = q.points % q.pairs.length;
-
-    q.pairs.forEach((pair, index) => {
-
-      const item = form.addMultipleChoiceItem();
-
-      item.setTitle(
-        q.question +
-        "\nPasangan " + (index + 1) +
-        ": " + pair.left
-      );
-
-      if (q.description) {
-        item.setHelpText(q.description);
+      if (!selectionText) {
+        throw new Error("ID soal belum diisi.");
       }
 
-      const choices = q.rightOptions.map(option =>
-  item.createChoice(option, option === pair.right)
-);
+      const selectedIds = selectionText === "*"
+        ? null
+        : [...new Set(
+            selectionText.split(",")
+              .map(id => id.trim())
+              .filter(Boolean)
+          )];
 
-item.setChoices(choices);
+      if (selectedIds !== null) {
 
-      const pairPoints = quotient + (index < remainder ? 1 : 0);
+        const existingIds = new Set(
+          allQuestions.map(row => String(row[0]).trim())
+        );
 
-item.setPoints(pairPoints);
-item.setRequired(true);
+        const notFound = selectedIds.filter(
+          id => !existingIds.has(id)
+        );
 
-mappingRows.push([
-  q.id,
-  item.getId(),
-  ++nomorItem,
-  index + 1,
-  q.type,
-  item.getTitle(),
-  pairPoints,
-  JSON.stringify([pair.right]),
-  "",
-  "",
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "OTOMATIS"
-]);
+        if (notFound.length > 0) {
+          throw new Error(
+            "ID SOAL TIDAK DITEMUKAN:\n\n" +
+            notFound.join("\n")
+          );
+        }
+      }
+
+      questions = selectedIds === null
+        ? [...allQuestions]
+        : allQuestions.filter(row =>
+            selectedIds.includes(String(row[0]).trim())
+          );
+
+    // METODE 2: ACAK
+    } else if (methodChoice === ui.Button.NO) {
+
+      const response = ui.prompt(
+        "JUMLAH SOAL ACAK",
+        "Jumlah soal tersedia: " + allQuestions.length +
+        "\nBerapa soal yang ingin ditambahkan?",
+        ui.ButtonSet.OK_CANCEL
+      );
+
+      if (response.getSelectedButton() !== ui.Button.OK) return;
+
+      const numberOfQuestions = Number(
+        response.getResponseText().trim()
+      );
+
+      if (
+        !Number.isInteger(numberOfQuestions) ||
+        numberOfQuestions < 1 ||
+        numberOfQuestions > allQuestions.length
+      ) {
+        throw new Error("Jumlah soal tidak valid.");
+      }
+
+      questions = [...allQuestions];
+
+      for (let i = questions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [questions[i], questions[j]] =
+          [questions[j], questions[i]];
+      }
+
+      questions = questions.slice(0, numberOfQuestions);
+
+    // METODE 3: KRITERIA
+    } else if (methodChoice === ui.Button.CANCEL) {
+
+      const askCriterion = (title, message) => {
+        const response = ui.prompt(
+          title,
+          message,
+          ui.ButtonSet.OK_CANCEL
+        );
+
+        if (response.getSelectedButton() !== ui.Button.OK) {
+          return null;
+        }
+
+        return response.getResponseText().trim();
+      };
+
+      const subject = askCriterion(
+        "MATA PELAJARAN",
+        "Masukkan mata pelajaran. Kosongkan jika tidak digunakan."
+      );
+      if (subject === null) return;
+
+      const grade = askCriterion(
+        "KELAS",
+        "Masukkan kelas. Kosongkan jika tidak digunakan."
+      );
+      if (grade === null) return;
+
+      const material = askCriterion(
+        "MATERI",
+        "Masukkan kata kunci materi. Kosongkan jika tidak digunakan."
+      );
+      if (material === null) return;
+
+      const bloom = askCriterion(
+        "LEVEL BLOOM",
+        "Masukkan C1 sampai C6. Kosongkan jika tidak digunakan."
+      );
+      if (bloom === null) return;
+
+      const cognitive = askCriterion(
+        "LEVEL KOGNITIF",
+        "Masukkan L1, L2, atau L3. Kosongkan jika tidak digunakan."
+      );
+      if (cognitive === null) return;
+
+      const filteredQuestions = allQuestions.filter(row =>
+        (!subject ||
+          String(row[2] || "").trim().toLowerCase() === subject.toLowerCase()) &&
+
+        (!grade ||
+          String(row[3] || "").trim().toLowerCase() === grade.toLowerCase()) &&
+
+        (!material ||
+          String(row[4] || "").trim().toLowerCase().includes(material.toLowerCase())) &&
+
+        (!bloom ||
+          String(row[6] || "").trim().toLowerCase() === bloom.toLowerCase()) &&
+
+        (!cognitive ||
+          String(row[7] || "").trim().toLowerCase() === cognitive.toLowerCase())
+      );
+
+      if (filteredQuestions.length === 0) {
+        throw new Error(
+          "Tidak ada soal yang sesuai dengan kriteria."
+        );
+      }
+
+      const response = ui.prompt(
+        "JUMLAH SOAL",
+        "Soal yang sesuai: " + filteredQuestions.length +
+        "\nBerapa soal yang ingin ditambahkan secara acak?",
+        ui.ButtonSet.OK_CANCEL
+      );
+
+      if (response.getSelectedButton() !== ui.Button.OK) return;
+
+      const numberOfQuestions = Number(
+        response.getResponseText().trim()
+      );
+
+      if (
+        !Number.isInteger(numberOfQuestions) ||
+        numberOfQuestions < 1 ||
+        numberOfQuestions > filteredQuestions.length
+      ) {
+        throw new Error("Jumlah soal tidak valid.");
+      }
+
+      questions = [...filteredQuestions];
+
+      for (let i = questions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [questions[i], questions[j]] =
+          [questions[j], questions[i]];
+      }
+
+      questions = questions.slice(0, numberOfQuestions);
+
+    } else {
+      return;
+    }
+
+    if (questions.length === 0) {
+      throw new Error("Tidak ada soal yang dipilih.");
+    }
+
+    // MEMERIKSA SOAL DUPLIKAT
+    const alreadyAdded = questions
+      .map(row => String(row[0]).trim())
+      .filter(id => loggedIds.has(id));
+
+    if (alreadyAdded.length > 0) {
+      throw new Error(
+        "SOAL SUDAH PERNAH DITAMBAHKAN:\n\n" +
+        alreadyAdded.join("\n")
+      );
+    }
+
+    // MEMVALIDASI SOAL
+    const plan = [];
+    const errors = [];
+
+    questions.forEach(row => {
+
+      const id = String(row[0]).trim();
+      const type = String(row[1]).trim().toUpperCase();
+      const question = String(row[8]).trim();
+      const points = Number(row[17]);
+
+      const description = String(row[19] || "").trim();
+      const imageId = String(row[20] || "").trim();
+
+      const material = String(row[4] || "").trim();
+      const objective = String(row[5] || "").trim();
+      const bloom = String(row[6] || "").trim();
+      const cognitive = String(row[7] || "").trim();
+
+      if (!Number.isInteger(points) || points < 0) {
+        errors.push(id + ": POIN tidak valid.");
+        return;
+      }
+
+      const options = [
+        String(row[9] || "").trim(),
+        String(row[10] || "").trim(),
+        String(row[11] || "").trim(),
+        String(row[12] || "").trim()
+      ];
+
+      const key = String(row[13] || "")
+        .trim()
+        .split(",")
+        .map(x => x.trim().toUpperCase())
+        .filter(Boolean);
+
+      // PILIHAN GANDA DAN PILIHAN GANDA KOMPLEKS
+      if (type === "PG" || type === "PGK") {
+
+        if (options.some(x => !x)) {
+          errors.push(id + ": Opsi A-D belum lengkap.");
+          return;
+        }
+
+        if (
+          (type === "PG" && (
+            key.length !== 1 ||
+            !["A", "B", "C", "D"].includes(key[0])
+          )) ||
+          (type === "PGK" && (
+            key.length < 2 ||
+            key.some(x => !["A", "B", "C", "D"].includes(x)) ||
+            new Set(key).size !== key.length
+          ))
+        ) {
+          errors.push(id + ": Kunci jawaban tidak valid.");
+          return;
+        }
+
+        plan.push({
+          id, type, question, points,
+          material, objective, bloom, cognitive,
+          description, options, key, imageId
+        });
+
+      // MENJODOHKAN
+      } else if (type === "MJ") {
+
+        const rawPairs = String(row[15] || "").trim();
+
+        if (!rawPairs) {
+          errors.push(id + ": Data pasangan kosong.");
+          return;
+        }
+
+        const pairs = rawPairs.split(";").map(pair => {
+          const parts = pair.split("=");
+
+          if (parts.length < 2) return null;
+
+          return {
+            left: parts[0].trim(),
+            right: parts.slice(1).join("=").trim()
+          };
+        });
+
+        if (pairs.some(p => !p || !p.left || !p.right)) {
+          errors.push(id + ": Format pasangan tidak valid.");
+          return;
+        }
+
+        const rightOptions = [...new Set(
+          pairs.map(p => p.right)
+        )];
+
+        if (
+          rightOptions.length !== pairs.length ||
+          points < pairs.length
+        ) {
+          errors.push(id + ": Pasangan atau poin tidak valid.");
+          return;
+        }
+
+        plan.push({
+          id, type, question, points,
+          material, objective, bloom, cognitive,
+          description, pairs, rightOptions, imageId
+        });
+
+      // ISIAN SINGKAT
+      } else if (type === "IS") {
+
+        const accepted = String(row[14] || "").trim();
+
+        if (!accepted) {
+          errors.push(id + ": Jawaban diterima kosong.");
+          return;
+        }
+
+        plan.push({
+          id, type, question, points,
+          material, objective, bloom, cognitive,
+          description, accepted, imageId
+        });
+
+      // URAIAN
+      } else if (type === "UR") {
+
+        const rubric = String(row[16] || "").trim();
+
+        if (!rubric) {
+          errors.push(id + ": Rubrik kosong.");
+          return;
+        }
+
+        plan.push({
+          id, type, question, points,
+          material, objective, bloom, cognitive,
+          description, rubric, imageId
+        });
+
+      } else {
+
+        errors.push(id + ": Jenis soal tidak dikenal.");
+
+      }
 
     });
 
-  } else if (q.type === "IS") {
+    if (plan.length === 0 || errors.length > 0) {
+      throw new Error(
+        "VALIDASI SOAL GAGAL:\n\n" +
+        (errors.length > 0
+          ? errors.join("\n")
+          : "Tidak ada soal valid.")
+      );
+    }
 
-    const item = form.addTextItem();
-
-    item.setTitle(q.question);
-
-    item.setHelpText(
-      (q.description ? q.description + "\n\n" : "") +
-      "Jawaban akan diperiksa oleh guru."
+    // KONFIRMASI PENAMBAHAN
+    const confirm = ui.alert(
+      "KONFIRMASI PENAMBAHAN",
+      "Form tujuan: " + form.getTitle() +
+      "\nJumlah soal: " + plan.length +
+      "\n\nSoal akan ditambahkan di bagian akhir Form." +
+      "\nSoal dan respons lama tetap dipertahankan." +
+      "\n\nLanjutkan?",
+      ui.ButtonSet.YES_NO
     );
 
-    item.setPoints(q.points);
-    item.setRequired(true);
-    mappingRows.push([
-  q.id,
-  item.getId(),
-  ++nomorItem,
-  "",
-  q.type,
-  q.question,
-  q.points,
-  "",
-  q.accepted,
-  "",
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "MANUAL"
-]);
+    if (confirm !== ui.Button.YES) return;
 
-  } else if (q.type === "UR") {
+    // MENENTUKAN NOMOR ITEM BERIKUTNYA
+    const existingMapping = mappingSheet.getDataRange().getValues();
 
-    const item = form.addParagraphTextItem();
+    let nomorItem = 0;
 
-    item.setTitle(q.question);
+    existingMapping.slice(1).forEach(row => {
+      if (String(row[0]).trim() === idUjian) {
+        nomorItem = Math.max(
+          nomorItem,
+          Number(row[3]) || 0
+        );
+      }
+    });
 
-    item.setHelpText(
-      (q.description ? q.description + "\n\n" : "") +
-      "Jawaban akan diperiksa berdasarkan rubrik guru."
+    const mappingRows = [];
+
+    // MENAMBAHKAN SOAL KE FORM
+    plan.forEach(q => {
+
+      // MENAMBAHKAN GAMBAR
+      if (q.imageId) {
+        const imageFile = DriveApp.getFileById(q.imageId);
+
+        form.addImageItem()
+          .setTitle("Gambar soal " + q.id)
+          .setImage(imageFile.getBlob())
+          .setAlignment(FormApp.Alignment.CENTER)
+          .setWidth(500);
+      }
+
+      // PILIHAN GANDA
+      if (q.type === "PG") {
+
+        const item = form.addMultipleChoiceItem();
+        item.setTitle(q.question);
+
+        if (q.description) {
+          item.setHelpText(q.description);
+        }
+
+        const choices = q.options.map((option, index) => {
+          const letter = String.fromCharCode(65 + index);
+          return item.createChoice(option, q.key[0] === letter);
+        });
+
+        item.setChoices(choices);
+        item.setPoints(q.points);
+        item.setRequired(true);
+
+        nomorItem++;
+
+        mappingRows.push([
+          q.id, item.getId(), nomorItem, "",
+          q.type, q.question, q.points,
+          JSON.stringify(q.key), "", "",
+          q.material, q.bloom, q.cognitive,
+          "DINILAI_OTOMATIS"
+        ]);
+
+      // PILIHAN GANDA KOMPLEKS
+      } else if (q.type === "PGK") {
+
+        const item = form.addCheckboxItem();
+        item.setTitle(q.question);
+
+        if (q.description) {
+          item.setHelpText(q.description);
+        }
+
+        const choices = q.options.map((option, index) => {
+          const letter = String.fromCharCode(65 + index);
+          return item.createChoice(option, q.key.includes(letter));
+        });
+
+        item.setChoices(choices);
+        item.setPoints(q.points);
+        item.setRequired(true);
+
+        nomorItem++;
+
+        mappingRows.push([
+          q.id, item.getId(), nomorItem, "",
+          q.type, q.question, q.points,
+          JSON.stringify(
+            q.key.map(letter =>
+              q.options[letter.charCodeAt(0) - 65]
+            )
+          ),
+          "", "",
+          q.material, q.bloom, q.cognitive,
+          "DINILAI_OTOMATIS"
+        ]);
+
+      // MENJODOHKAN
+      } else if (q.type === "MJ") {
+
+        const quotient = Math.floor(
+          q.points / q.pairs.length
+        );
+
+        const remainder = q.points % q.pairs.length;
+
+        q.pairs.forEach((pair, index) => {
+
+          const item = form.addMultipleChoiceItem();
+
+          item.setTitle(
+            q.question +
+            "\nPasangan " + (index + 1) +
+            ": " + pair.left
+          );
+
+          if (q.description) {
+            item.setHelpText(q.description);
+          }
+
+          const choices = q.rightOptions.map(option =>
+            item.createChoice(option, option === pair.right)
+          );
+
+          item.setChoices(choices);
+
+          const pairPoints =
+            quotient + (index < remainder ? 1 : 0);
+
+          item.setPoints(pairPoints);
+          item.setRequired(true);
+
+          nomorItem++;
+
+          mappingRows.push([
+            q.id, item.getId(), nomorItem, index + 1,
+            q.type, item.getTitle(), pairPoints,
+            JSON.stringify(pair.right), "", "",
+            q.material, q.bloom, q.cognitive,
+            "DINILAI_OTOMATIS"
+          ]);
+
+        });
+
+      // ISIAN SINGKAT
+      } else if (q.type === "IS") {
+
+        const item = form.addTextItem();
+        item.setTitle(q.question);
+
+        item.setHelpText(
+          (q.description ? q.description + "\n\n" : "") +
+          "Jawaban akan diperiksa oleh guru."
+        );
+
+        item.setPoints(q.points);
+        item.setRequired(true);
+
+        nomorItem++;
+
+        mappingRows.push([
+          q.id, item.getId(), nomorItem, "",
+          q.type, q.question, q.points,
+          "", JSON.stringify([q.accepted]), "",
+          q.material, q.bloom, q.cognitive,
+          "PERLU_PENILAIAN_GURU"
+        ]);
+
+      // URAIAN
+      } else if (q.type === "UR") {
+
+        const item = form.addParagraphTextItem();
+        item.setTitle(q.question);
+
+        item.setHelpText(
+          (q.description ? q.description + "\n\n" : "") +
+          "Jawaban akan diperiksa berdasarkan rubrik guru."
+        );
+
+        item.setPoints(q.points);
+        item.setRequired(true);
+
+        nomorItem++;
+
+        mappingRows.push([
+          q.id, item.getId(), nomorItem, "",
+          q.type, q.question, q.points,
+          "", "", JSON.stringify(q.rubric),
+          q.material, q.bloom, q.cognitive,
+          "PERLU_PENILAIAN_GURU"
+        ]);
+
+      }
+
+      itemsAdded++;
+
+    });
+
+    // MENYIMPAN PEMETAAN SOAL
+    if (mappingRows.length > 0) {
+
+      const finalMappingRows = mappingRows.map(row => [
+        idUjian,
+        ...row
+      ]);
+
+      mappingSheet.getRange(
+        mappingSheet.getLastRow() + 1,
+        1,
+        finalMappingRows.length,
+        15
+      ).setValues(finalMappingRows);
+
+    }
+
+    // MENYIMPAN LOG SOAL
+    const logRows = plan.map(q => [
+      match[0],
+      q.id,
+      new Date()
+    ]);
+
+    if (logRows.length > 0) {
+      logSheet.getRange(
+        logSheet.getLastRow() + 1,
+        1,
+        logRows.length,
+        3
+      ).setValues(logRows);
+    }
+
+    ui.alert(
+      "PENAMBAHAN SOAL BERHASIL\n\n" +
+      "Form: " + form.getTitle() +
+      "\nJumlah soal ditambahkan: " + plan.length
     );
 
-    item.setPoints(q.points);
-    item.setRequired(true);
-mappingRows.push([
-  q.id,
-  item.getId(),
-  ++nomorItem,
-  "",
-  q.type,
-  q.question,
-  q.points,
-  "",
-  "",
-  q.rubric,
-  q.material,
-  q.bloom,
-  q.cognitive,
-  "MANUAL"
-]);
-  }
-
-});
-
-// MENYIMPAN LOG SOAL YANG BERHASIL DITAMBAHKAN
-const logRows = plan.map(q => [
-  match[0],
-  q.id,
-  new Date()
-]);
-
-if (logRows.length > 0) {
-  logSheet.getRange(
-    logSheet.getLastRow() + 1,
-    1,
-    logRows.length,
-    3
-  ).setValues(logRows);
-}
-
-ui.alert(
-  "PENAMBAHAN SOAL BERHASIL\n\n" +
-  "Form: " + form.getTitle() +
-  "\nJumlah soal ditambahkan: " + plan.length
-);
   } catch (error) {
 
     ui.alert(
       "PROSES PENAMBAHAN SOAL GAGAL\n\n" +
-      error.message
+      error.message +
+      (itemsAdded > 0
+        ? "\n\nPERHATIAN: Sebagian soal mungkin sudah terlanjur ditambahkan ke Form. Periksa Form dan spreadsheet sebelum mencoba kembali."
+        : "")
     );
 
   }
 
 }
+
 
 // ==================================================
 // 7. VALIDASI BANK SOAL
 // ==================================================
 
-function validasiBankSoal() {
+
+function editSoal() {
 
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1897,241 +1881,7 @@ function validasiBankSoal() {
     return;
   }
 
-  const values = sheet.getRange(
-    2, 1, sheet.getLastRow() - 1, 21
-  ).getValues();
-
-  const errors = [];
-  const seenIds = new Map();
-
-  let validCount = 0;
-  let emptyCount = 0;
-
-  values.forEach((row, index) => {
-
-    const rowNumber = index + 2;
-
-    const id = String(row[0] || "").trim();
-    const type = String(row[1] || "").trim().toUpperCase();
-    const question = String(row[8] || "").trim();
-
-    // Melewati baris yang benar-benar kosong
-    if (row.every(value => String(value).trim() === "")) {
-      emptyCount++;
-      return;
-    }
-
-    const addError = message => {
-      errors.push("Baris " + rowNumber + " (" +
-        (id || "TANPA ID") + "): " + message);
-    };
-
-    let hasError = false;
-
-    const checkError = message => {
-      addError(message);
-      hasError = true;
-    };
-
-    // MEMERIKSA ID
-    if (!id) {
-      checkError("ID soal kosong.");
-    } else if (seenIds.has(id)) {
-      checkError(
-        "ID duplikat. Pertama ditemukan pada baris " +
-        seenIds.get(id) + "."
-      );
-    } else {
-      seenIds.set(id, rowNumber);
-    }
-
-    // MEMERIKSA JENIS SOAL
-    if (!["PG", "PGK", "MJ", "IS", "UR"].includes(type)) {
-      checkError("Jenis soal tidak valid.");
-    }
-
-    // MEMERIKSA DATA WAJIB
-    const requiredFields = [
-      [2, "MATA PELAJARAN"],
-      [3, "KELAS"],
-      [4, "MATERI"],
-      [5, "TUJUAN PEMBELAJARAN"],
-      [6, "LEVEL BLOOM"],
-      [7, "LEVEL KOGNITIF"],
-      [8, "PERTANYAAN"]
-    ];
-
-    requiredFields.forEach(([column, label]) => {
-      if (!String(row[column] || "").trim()) {
-        checkError(label + " kosong.");
-      }
-    });
-
-    // MEMERIKSA LEVEL BLOOM
-    if (
-      String(row[6]).trim() &&
-      !/^C[1-6]$/i.test(String(row[6]).trim())
-    ) {
-      checkError("Level Bloom harus C1 sampai C6.");
-    }
-
-    // MEMERIKSA LEVEL KOGNITIF
-    if (
-      String(row[7]).trim() &&
-      !/^L[1-3]$/i.test(String(row[7]).trim())
-    ) {
-      checkError("Level kognitif harus L1 sampai L3.");
-    }
-
-    // MEMERIKSA POIN
-    const points = row[17];
-
-    if (
-      points === "" ||
-      !Number.isInteger(Number(points)) ||
-      Number(points) < 0
-    ) {
-      checkError("POIN harus berupa bilangan bulat minimal 0.");
-    }
-
-    // MEMERIKSA PG DAN PGK
-    if (type === "PG" || type === "PGK") {
-
-      const options = row.slice(9, 13).map(
-        value => String(value || "").trim()
-      );
-
-      const key = String(row[13] || "")
-        .split(",")
-        .map(value => value.trim().toUpperCase())
-        .filter(Boolean);
-
-      if (options.some(option => !option)) {
-        checkError("Opsi A sampai D harus lengkap.");
-      }
-
-      if (
-        key.some(value => !["A", "B", "C", "D"].includes(value)) ||
-        new Set(key).size !== key.length ||
-        (type === "PG" && key.length !== 1) ||
-        (type === "PGK" && key.length < 2)
-      ) {
-        checkError("Format kunci jawaban tidak valid.");
-      }
-    }
-
-    // MEMERIKSA MENJODOHKAN
-    if (type === "MJ") {
-
-      const rawPairs = String(row[15] || "").trim();
-
-      if (!rawPairs) {
-        checkError("Data PASANGAN kosong.");
-      } else {
-
-        const pairs = rawPairs.split(";").map(pair => {
-          const parts = pair.split("=");
-
-          if (parts.length < 2) return null;
-
-          return {
-            left: parts[0].trim(),
-            right: parts.slice(1).join("=").trim()
-          };
-        });
-
-        if (pairs.some(pair =>
-          !pair || !pair.left || !pair.right
-        )) {
-          checkError(
-            "Format pasangan harus kiri=kanan; kiri=kanan."
-          );
-        } else {
-
-          const rightOptions = pairs.map(pair => pair.right);
-
-          if (new Set(rightOptions).size !== pairs.length) {
-            checkError("Jawaban kanan pada pasangan tidak boleh sama.");
-          }
-
-          if (Number.isInteger(Number(points)) &&
-              Number(points) < pairs.length) {
-            checkError(
-              "Poin harus minimal sama dengan jumlah pasangan."
-            );
-          }
-        }
-      }
-    }
-
-    // MEMERIKSA ISIAN SINGKAT
-    if (
-      type === "IS" &&
-      !String(row[14] || "").trim()
-    ) {
-      checkError("JAWABAN_DITERIMA kosong.");
-    }
-
-    // MEMERIKSA URAIAN
-    if (
-      type === "UR" &&
-      !String(row[16] || "").trim()
-    ) {
-      checkError("RUBRIK kosong.");
-    }
-
-    if (hasError) {
-      // Baris ini memiliki kesalahan
-    } else {
-      validCount++;
-    }
-
-  });
-
-  // MEMBUAT LAPORAN
-  let message =
-    "HASIL VALIDASI BANK SOAL\n\n" +
-    "Jumlah baris diperiksa: " + (values.length - emptyCount) +
-    "\nSoal valid: " + validCount +
-    "\nBaris kosong dilewati: " + emptyCount +
-    "\nJumlah kesalahan: " + errors.length;
-
-  if (errors.length > 0) {
-    message += "\n\nRINCIAN KESALAHAN:\n\n" +
-      errors.join("\n");
-
-    ui.alert(
-      "VALIDASI SELESAI - PERLU PERBAIKAN",
-      message,
-      ui.ButtonSet.OK
-    );
-
-  } else {
-
-    ui.alert(
-      "VALIDASI BERHASIL",
-      message + "\n\nSemua soal yang diperiksa valid.",
-      ui.ButtonSet.OK
-    );
-
-  }
-
-}
-// ==================================================
-// 8. EDIT SOAL
-// ==================================================
-
-function editSoal() {
-
-  const ui = SpreadsheetApp.getUi();
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("BANK_SOAL");
-
-  if (!sheet) {
-    ui.alert("Sheet BANK_SOAL tidak ditemukan.");
-    return;
-  }
-
+  // MEMINTA ID SOAL
   const idPrompt = ui.prompt(
     "EDIT SOAL",
     "Masukkan ID_SOAL yang akan diedit:",
@@ -2147,33 +1897,48 @@ function editSoal() {
     return;
   }
 
+  // MENCARI BARIS SOAL
   const lastRow = sheet.getLastRow();
 
-  if (lastRow < 2) {
-    ui.alert("BANK_SOAL belum memiliki data soal.");
-    return;
-  }
+  const data = sheet.getRange(
+    2, 1, lastRow - 1, 21
+  ).getValues();
 
-  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  const matchingIndexes = [];
 
-  const index = ids.findIndex(row =>
-    String(row[0]).trim() === id
-  );
+  data.forEach((row, index) => {
+    if (String(row[0]).trim() === id) {
+      matchingIndexes.push(index);
+    }
+  });
 
-  if (index === -1) {
+  if (matchingIndexes.length === 0) {
     ui.alert("ID_SOAL tidak ditemukan.");
     return;
   }
 
-  const rowNumber = index + 2;
+  if (matchingIndexes.length > 1) {
+    ui.alert(
+      "ID_SOAL DUPLIKAT\n\n" +
+      "Ditemukan lebih dari satu soal dengan ID " + id +
+      ". Perbaiki ID terlebih dahulu melalui BANK_SOAL."
+    );
+    return;
+  }
 
-  const headers = sheet.getRange(1, 1, 1, 21).getValues()[0];
+  const rowNumber = matchingIndexes[0] + 2;
 
+  // MEMBACA HEADER
+  const headers = sheet.getRange(
+    1, 1, 1, 21
+  ).getValues()[0];
+
+  // MEMILIH KOLOM
   const fieldPrompt = ui.prompt(
     "PILIH KOLOM",
     "Masukkan nomor kolom yang ingin diedit:\n\n" +
-    headers.map((header, i) =>
-      (i + 1) + ". " + header
+    headers.map((header, index) =>
+      (index + 1) + ". " + header
     ).join("\n") +
     "\n\nID_SOAL (kolom 1) tidak dapat diubah.",
     ui.ButtonSet.OK_CANCEL
@@ -2181,19 +1946,31 @@ function editSoal() {
 
   if (fieldPrompt.getSelectedButton() !== ui.Button.OK) return;
 
-  const column = Number(fieldPrompt.getResponseText());
+  const column = Number(
+    fieldPrompt.getResponseText().trim()
+  );
 
   if (
     !Number.isInteger(column) ||
     column < 2 ||
     column > 21
   ) {
-    ui.alert("Nomor kolom tidak valid. Pilih kolom 2 sampai 21.");
+    ui.alert(
+      "Nomor kolom tidak valid. Pilih kolom 2 sampai 21."
+    );
     return;
   }
 
-  const oldValue = sheet.getRange(rowNumber, column).getDisplayValue();
+  // MEMBACA NILAI LAMA
+  const currentRow = sheet.getRange(
+    rowNumber, 1, 1, 21
+  ).getValues()[0];
 
+  const oldValue = sheet.getRange(
+    rowNumber, column
+  ).getDisplayValue();
+
+  // MEMINTA NILAI BARU
   const valuePrompt = ui.prompt(
     "EDIT " + headers[column - 1],
     "Nilai saat ini:\n" + oldValue +
@@ -2203,100 +1980,261 @@ function editSoal() {
 
   if (valuePrompt.getSelectedButton() !== ui.Button.OK) return;
 
-  const newValue = valuePrompt.getResponseText();
+  let newValue = valuePrompt.getResponseText();
 
-  sheet.getRange(rowNumber, column).setValue(newValue);
+  // NORMALISASI DATA TERTENTU
+  if (column === 2) {
+    newValue = String(newValue).trim().toUpperCase();
+  }
+
+  if (column === 7 || column === 8) {
+    newValue = String(newValue).trim().toUpperCase();
+  }
+
+  if (column === 18 && String(newValue).trim() !== "") {
+    newValue = Number(newValue);
+  }
+
+  // MENYIAPKAN DATA BARU TANPA MENGUBAH SHEET
+  const proposedRow = [...currentRow];
+
+  proposedRow[column - 1] = newValue;
+
+  // MEMERIKSA ID DUPLIKAT
+  const duplicateId = data.some((row, index) =>
+    index !== matchingIndexes[0] &&
+    String(row[0]).trim() === id
+  );
+
+  if (duplicateId) {
+    ui.alert("ID_SOAL duplikat. Perubahan dibatalkan.");
+    return;
+  }
+
+  // VALIDASI SATU BARIS
+  const errors = validasiSatuBarisSoal_(proposedRow);
+
+  if (errors.length > 0) {
+
+    ui.alert(
+      "PERUBAHAN DITOLAK\n\n" +
+      "Data baru tidak memenuhi aturan BANK_SOAL.\n\n" +
+      errors.join("\n") +
+      "\n\nNilai lama tetap dipertahankan."
+    );
+
+    return;
+  }
+
+  // MENYIMPAN JIKA VALID
+  sheet.getRange(
+    rowNumber, column
+  ).setValue(newValue);
 
   ui.alert(
-    "BERHASIL",
-    "Data soal dengan ID " + id +
-    " berhasil diperbarui pada kolom " + headers[column - 1] + ".",
-    ui.ButtonSet.OK
+    "EDIT SOAL BERHASIL\n\n" +
+    "ID_SOAL: " + id +
+    "\nKolom: " + headers[column - 1] +
+    "\n\nData berhasil diperbarui dan lolos validasi."
   );
 
 }
 
+
+// ==================================================
+// VALIDASI SATU BARIS SOAL
+// ==================================================
+
+function validasiSatuBarisSoal_(row) {
+
+  const errors = [];
+
+  const id = String(row[0] || "").trim();
+  const type = String(row[1] || "").trim().toUpperCase();
+
+  const addError = message => {
+    errors.push(message);
+  };
+
+  // MEMERIKSA ID
+  if (!id) {
+    addError("ID_SOAL kosong.");
+  }
+
+  // MEMERIKSA JENIS SOAL
+  const validTypes = ["PG", "PGK", "MJ", "IS", "UR"];
+
+  if (!validTypes.includes(type)) {
+    addError("JENIS_SOAL harus PG, PGK, MJ, IS, atau UR.");
+  }
+
+  // MEMERIKSA DATA WAJIB
+  const requiredFields = [
+    [2, "MATA PELAJARAN"],
+    [3, "KELAS"],
+    [4, "MATERI"],
+    [5, "TUJUAN PEMBELAJARAN"],
+    [6, "LEVEL BLOOM"],
+    [7, "LEVEL KOGNITIF"],
+    [8, "PERTANYAAN"]
+  ];
+
+  requiredFields.forEach(([column, label]) => {
+    if (!String(row[column] || "").trim()) {
+      addError(label + " kosong.");
+    }
+  });
+
+  // MEMERIKSA LEVEL BLOOM
+  const bloom = String(row[6] || "").trim();
+
+  if (bloom && !/^C[1-6]$/i.test(bloom)) {
+    addError("LEVEL_BLOOM harus C1 sampai C6.");
+  }
+
+  // MEMERIKSA LEVEL KOGNITIF
+  const cognitive = String(row[7] || "").trim();
+
+  if (cognitive && !/^L[1-3]$/i.test(cognitive)) {
+    addError("LEVEL_KOGNITIF harus L1 sampai L3.");
+  }
+
+  // MEMERIKSA POIN
+  const points = row[17];
+
+  const validPoints =
+    String(points).trim() !== "" &&
+    Number.isInteger(Number(points)) &&
+    Number(points) >= 0;
+
+  if (!validPoints) {
+    addError("POIN harus berupa bilangan bulat minimal 0.");
+  }
+
+  // MEMERIKSA PG DAN PGK
+  if (type === "PG" || type === "PGK") {
+
+    const options = row.slice(9, 13).map(value =>
+      String(value || "").trim()
+    );
+
+    const key = String(row[13] || "")
+      .split(",")
+      .map(value => value.trim().toUpperCase())
+      .filter(Boolean);
+
+    if (options.some(option => !option)) {
+      addError("OPSI A sampai D harus lengkap.");
+    }
+
+    const filledOptions = options.filter(Boolean);
+
+    if (new Set(filledOptions).size !== filledOptions.length) {
+      addError("Isi setiap opsi jawaban harus berbeda.");
+    }
+
+    if (
+      key.some(value =>
+        !["A", "B", "C", "D"].includes(value)
+      ) ||
+      new Set(key).size !== key.length ||
+      (type === "PG" && key.length !== 1) ||
+      (type === "PGK" && key.length < 2)
+    ) {
+      addError("KUNCI_JAWABAN tidak valid.");
+    }
+  }
+
+  // MEMERIKSA MENJODOHKAN
+  if (type === "MJ") {
+
+    const rawPairs = String(row[15] || "").trim();
+
+    if (!rawPairs) {
+
+      addError("PASANGAN kosong.");
+
+    } else {
+
+      const pairs = rawPairs.split(";").map(pair => {
+
+        const parts = pair.split("=");
+
+        if (parts.length < 2) {
+          return null;
+        }
+
+        return {
+          left: parts[0].trim(),
+          right: parts.slice(1).join("=").trim()
+        };
+
+      });
+
+      if (pairs.some(pair =>
+        !pair || !pair.left || !pair.right
+      )) {
+
+        addError(
+          "Format PASANGAN harus kiri=kanan; kiri=kanan."
+        );
+
+      } else {
+
+        const leftOptions = pairs.map(pair => pair.left);
+        const rightOptions = pairs.map(pair => pair.right);
+
+        if (new Set(leftOptions).size !== pairs.length) {
+          addError("Bagian kiri pasangan tidak boleh sama.");
+        }
+
+        if (new Set(rightOptions).size !== pairs.length) {
+          addError("Jawaban kanan pasangan tidak boleh sama.");
+        }
+
+        if (
+          validPoints &&
+          Number(points) < pairs.length
+        ) {
+          addError(
+            "POIN harus minimal sama dengan jumlah pasangan."
+          );
+        }
+
+      }
+    }
+  }
+
+  // MEMERIKSA ISIAN SINGKAT
+  if (
+    type === "IS" &&
+    !String(row[14] || "").trim()
+  ) {
+    addError("JAWABAN_DITERIMA kosong.");
+  }
+
+  // MEMERIKSA URAIAN
+  if (
+    type === "UR" &&
+    !String(row[16] || "").trim()
+  ) {
+    addError("RUBRIK kosong.");
+  }
+
+  return errors;
+
+}
 
 // ==================================================
 // 9. HAPUS SOAL
 // ==================================================
 
+
+ // ==================================================
+ // 9. HAPUS SOAL
+ // ==================================================
+
 function hapusSoal() {
-
-  const ui = SpreadsheetApp.getUi();
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("BANK_SOAL");
-
-  if (!sheet) {
-    ui.alert("Sheet BANK_SOAL tidak ditemukan.");
-    return;
-  }
-
-  const idPrompt = ui.prompt(
-    "HAPUS SOAL",
-    "Masukkan ID_SOAL yang akan dihapus:",
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (idPrompt.getSelectedButton() !== ui.Button.OK) return;
-
-  const id = idPrompt.getResponseText().trim();
-
-  if (!id) {
-    ui.alert("ID_SOAL tidak boleh kosong.");
-    return;
-  }
-
-  const lastRow = sheet.getLastRow();
-
-  if (lastRow < 2) {
-    ui.alert("BANK_SOAL belum memiliki data soal.");
-    return;
-  }
-
-  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-
-  const index = ids.findIndex(row =>
-    String(row[0]).trim() === id
-  );
-
-  if (index === -1) {
-    ui.alert("ID_SOAL tidak ditemukan.");
-    return;
-  }
-
-  const rowNumber = index + 2;
-
-  const question = sheet.getRange(rowNumber, 9).getDisplayValue();
-
-  const confirmation = ui.alert(
-    "KONFIRMASI HAPUS SOAL",
-    "ID_SOAL: " + id +
-    "\n\nPERTANYAAN:\n" + question +
-    "\n\nYakin ingin menghapus soal ini secara permanen?",
-    ui.ButtonSet.YES_NO
-  );
-
-  if (confirmation !== ui.Button.YES) {
-    ui.alert("Penghapusan dibatalkan.");
-    return;
-  }
-
-  sheet.deleteRow(rowNumber);
-
-  ui.alert(
-    "BERHASIL",
-    "Soal dengan ID " + id + " berhasil dihapus dari BANK_SOAL.",
-    ui.ButtonSet.OK
-  );
-
-}
-
-// ==================================================
-// 10. DETEKSI PERTANYAAN DUPLIKAT
-// ==================================================
-
-function deteksiDuplikatSoal() {
 
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -2312,8 +2250,157 @@ function deteksiDuplikatSoal() {
     return;
   }
 
+  // MEMINTA ID SOAL
+  const idPrompt = ui.prompt(
+    "HAPUS SOAL",
+    "Masukkan ID_SOAL yang akan dihapus:",
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (idPrompt.getSelectedButton() !== ui.Button.OK) return;
+
+  const id = idPrompt.getResponseText().trim();
+
+  if (!id) {
+    ui.alert("ID_SOAL tidak boleh kosong.");
+    return;
+  }
+
+  // MENCARI ID SOAL
+  const lastRow = sheet.getLastRow();
+
   const data = sheet.getRange(
-    2, 1, sheet.getLastRow() - 1, 21
+    2, 1, lastRow - 1, 21
+  ).getValues();
+
+  const matchingIndexes = [];
+
+  data.forEach((row, index) => {
+    if (String(row[0]).trim() === id) {
+      matchingIndexes.push(index);
+    }
+  });
+
+  if (matchingIndexes.length === 0) {
+    ui.alert("ID_SOAL tidak ditemukan.");
+    return;
+  }
+
+  // MENCEGAH PENGHAPUSAN ID DUPLIKAT
+  if (matchingIndexes.length > 1) {
+    ui.alert(
+      "ID_SOAL DUPLIKAT\n\n" +
+      "Ditemukan lebih dari satu soal dengan ID " + id +
+      ". Perbaiki ID terlebih dahulu sebelum menghapus."
+    );
+    return;
+  }
+
+  const rowNumber = matchingIndexes[0] + 2;
+
+  const question = String(data[matchingIndexes[0]][8] || "");
+
+  const type = String(data[matchingIndexes[0]][1] || "");
+
+  // MEMERIKSA RIWAYAT PENGGUNAAN SOAL
+  const mappingSheet = ss.getSheetByName(
+    "PEMETAAN_SOAL_UJIAN"
+  );
+
+  const logSheet = ss.getSheetByName("LOG_SOAL_FORM");
+
+  let usedInExam = false;
+  let usedInLog = false;
+
+  if (mappingSheet && mappingSheet.getLastRow() >= 2) {
+
+    const mappingData = mappingSheet.getRange(
+      2, 1, mappingSheet.getLastRow() - 1, 15
+    ).getValues();
+
+    usedInExam = mappingData.some(row =>
+      String(row[1]).trim() === id
+    );
+
+  }
+
+  if (logSheet && logSheet.getLastRow() >= 2) {
+
+    const logData = logSheet.getRange(
+      2, 1, logSheet.getLastRow() - 1, 3
+    ).getValues();
+
+    usedInLog = logData.some(row =>
+      String(row[1]).trim() === id
+    );
+
+  }
+
+  // MENYUSUN INFORMASI KONFIRMASI
+  let warning = "";
+
+  if (usedInExam || usedInLog) {
+    warning =
+      "\n\nPERINGATAN:\n" +
+      "Soal ini memiliki riwayat penggunaan dalam ujian.\n" +
+      "Data pemetaan dan log ujian tidak akan ikut dihapus.";
+  }
+
+  // KONFIRMASI PENGHAPUSAN
+  const confirmation = ui.alert(
+    "KONFIRMASI HAPUS SOAL",
+    "ID_SOAL: " + id +
+    "\nJENIS SOAL: " + type +
+    "\n\nPERTANYAAN:\n" + question +
+    warning +
+    "\n\nSoal akan dihapus permanen dari BANK_SOAL." +
+    "\n\nYakin ingin melanjutkan?",
+    ui.ButtonSet.YES_NO
+  );
+
+  if (confirmation !== ui.Button.YES) {
+    ui.alert("Penghapusan dibatalkan.");
+    return;
+  }
+
+  // MENGHAPUS BARIS SOAL
+  sheet.deleteRow(rowNumber);
+
+  ui.alert(
+    "PENGHAPUSAN BERHASIL\n\n" +
+    "ID_SOAL: " + id +
+    "\nSoal berhasil dihapus dari BANK_SOAL." +
+    "\nRiwayat pemetaan dan penggunaan ujian tetap dipertahankan."
+  );
+
+}
+
+
+// ==================================================
+// 10. DETEKSI PERTANYAAN DUPLIKAT
+// ==================================================
+
+
+function deteksiDuplikatSoal() {
+
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("BANK_SOAL");
+
+  if (!sheet) {
+    ui.alert("Sheet BANK_SOAL tidak ditemukan.");
+    return;
+  }
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    ui.alert("BANK_SOAL belum memiliki data soal.");
+    return;
+  }
+
+  const data = sheet.getRange(
+    2, 1, lastRow - 1, 21
   ).getValues();
 
   const groups = new Map();
@@ -2337,7 +2424,8 @@ function deteksiDuplikatSoal() {
     // Normalisasi teks pertanyaan
     const normalized = question
       .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .normalize("NFKC")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -2357,11 +2445,14 @@ function deteksiDuplikatSoal() {
 
   const duplicates = [];
 
+  let duplicateQuestionCount = 0;
+
   groups.forEach(items => {
 
     if (items.length > 1) {
 
       duplicates.push(items);
+      duplicateQuestionCount += items.length;
 
     }
 
@@ -2371,7 +2462,9 @@ function deteksiDuplikatSoal() {
     "HASIL DETEKSI PERTANYAAN DUPLIKAT\n\n" +
     "Jumlah pertanyaan diperiksa: " + checkedCount +
     "\nPertanyaan kosong dilewati: " + emptyCount +
-    "\nKelompok pertanyaan duplikat: " + duplicates.length;
+    "\nKelompok duplikat: " + duplicates.length +
+    "\nTotal soal terindikasi duplikat: " +
+    duplicateQuestionCount;
 
   if (duplicates.length > 0) {
 
@@ -2404,7 +2497,8 @@ function deteksiDuplikatSoal() {
 
     ui.alert(
       "TIDAK ADA DUPLIKAT",
-      message + "\n\nTidak ditemukan pertanyaan dengan teks yang sama setelah normalisasi.",
+      message +
+      "\n\nTidak ditemukan pertanyaan dengan teks yang sama setelah normalisasi.",
       ui.ButtonSet.OK
     );
 
@@ -2412,9 +2506,11 @@ function deteksiDuplikatSoal() {
 
 }
 
+
 // ==================================================
 // 11. PENCARIAN DAN FILTER BANK SOAL
 // ==================================================
+
 
 function cariFilterBankSoal() {
 
@@ -2427,13 +2523,15 @@ function cariFilterBankSoal() {
     return;
   }
 
-  if (sheet.getLastRow() < 2) {
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
     ui.alert("BANK_SOAL belum memiliki data soal.");
     return;
   }
 
   const filters = [
-    ["ID_SOAL", "Masukkan ID soal (kosongkan jika tidak digunakan):"],
+    ["ID_SOAL", "Masukkan ID soal:"],
     ["MATA PELAJARAN", "Masukkan mata pelajaran:"],
     ["KELAS", "Masukkan kelas:"],
     ["MATERI", "Masukkan kata kunci materi:"],
@@ -2449,22 +2547,68 @@ function cariFilterBankSoal() {
 
     const response = ui.prompt(
       "PENCARIAN BANK SOAL",
-      filter[1],
+      filter[1] + "\n\nKosongkan jika kriteria ini tidak digunakan.",
       ui.ButtonSet.OK_CANCEL
     );
 
     if (response.getSelectedButton() !== ui.Button.OK) {
+      ui.alert("Pencarian dibatalkan.");
       return;
     }
 
-    criteria[filter[0]] = response.getResponseText()
-      .trim()
-      .toLowerCase();
+    criteria[filter[0]] = String(
+      response.getResponseText() || ""
+    ).trim().toLowerCase();
 
   }
 
+  // Validasi jenis soal jika diisi
+  const validTypes = ["pg", "pgk", "mj", "is", "ur"];
+
+  if (
+    criteria["JENIS SOAL"] &&
+    !validTypes.includes(criteria["JENIS SOAL"].toLowerCase())
+  ) {
+    ui.alert(
+      "JENIS SOAL TIDAK VALID",
+      "Gunakan salah satu jenis berikut: PG, PGK, MJ, IS, UR.",
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
+  // Validasi level Bloom jika diisi
+  const validBloom = ["c1", "c2", "c3", "c4", "c5", "c6"];
+
+  if (
+    criteria["LEVEL BLOOM"] &&
+    !validBloom.includes(criteria["LEVEL BLOOM"])
+  ) {
+    ui.alert(
+      "LEVEL BLOOM TIDAK VALID",
+      "Gunakan level C1 sampai C6.",
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
+  // Validasi level kognitif jika diisi
+  const validCognitive = ["l1", "l2", "l3"];
+
+  if (
+    criteria["LEVEL KOGNITIF"] &&
+    !validCognitive.includes(criteria["LEVEL KOGNITIF"])
+  ) {
+    ui.alert(
+      "LEVEL KOGNITIF TIDAK VALID",
+      "Gunakan level L1, L2, atau L3.",
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
   const data = sheet.getRange(
-    2, 1, sheet.getLastRow() - 1, 21
+    2, 1, lastRow - 1, 21
   ).getValues();
 
   const columnMap = {
@@ -2478,16 +2622,35 @@ function cariFilterBankSoal() {
     "PERTANYAAN": 8
   };
 
+  const activeCriteria = filters.filter(
+    filter => criteria[filter[0]] !== ""
+  );
+
+  if (activeCriteria.length === 0) {
+    ui.alert(
+      "KRITERIA KOSONG",
+      "Masukkan minimal satu kriteria pencarian.",
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
   const matches = [];
 
   data.forEach((row, index) => {
 
-    const isMatch = filters.every(filter => {
+    // Lewati baris tanpa ID dan pertanyaan
+    const id = String(row[0] || "").trim();
+    const question = String(row[8] || "").trim();
+
+    if (!id && !question) {
+      return;
+    }
+
+    const isMatch = activeCriteria.every(filter => {
 
       const field = filter[0];
       const keyword = criteria[field];
-
-      if (!keyword) return true;
 
       const value = String(
         row[columnMap[field]] || ""
@@ -2503,12 +2666,7 @@ function cariFilterBankSoal() {
 
   });
 
-  // Menghapus filter sebelumnya
-  if (sheet.getFilter()) {
-    sheet.getFilter().remove();
-  }
-
-  // Menghapus filter tampilan lama
+  // Tampilkan seluruh baris terlebih dahulu
   sheet.showRows(1, sheet.getMaxRows());
 
   if (matches.length === 0) {
@@ -2527,16 +2685,21 @@ function cariFilterBankSoal() {
 
   let startHidden = null;
 
-  for (let row = 2; row <= sheet.getLastRow() + 1; row++) {
+  for (
+    let row = 2;
+    row <= lastRow + 1;
+    row++
+  ) {
 
     const shouldHide =
-      row <= sheet.getLastRow() && !matchSet.has(row);
+      row <= lastRow && !matchSet.has(row);
 
     if (shouldHide && startHidden === null) {
       startHidden = row;
     }
 
     if (!shouldHide && startHidden !== null) {
+
       sheet.hideRows(
         startHidden,
         row - startHidden
@@ -2549,9 +2712,10 @@ function cariFilterBankSoal() {
 
   ui.alert(
     "PENCARIAN SELESAI",
-    "Jumlah soal ditemukan: " + matches.length +
+    "Jumlah kriteria digunakan: " + activeCriteria.length +
+    "\nJumlah soal ditemukan: " + matches.length +
     "\n\nBaris yang tidak sesuai telah disembunyikan." +
-    "\n\nUntuk menampilkan semua soal kembali, gunakan menu Reset Filter Bank Soal.",
+    "\n\nGunakan menu Reset Filter Bank Soal untuk menampilkan semua soal kembali.",
     ui.ButtonSet.OK
   );
 
@@ -2587,8 +2751,6 @@ function resetFilterBankSoal() {
   );
 
 }
-
-
 
 function siapkanSheetAnalisis() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -4082,3 +4244,14 @@ function sinkronkanBobotSoal() {
   );
 }
 
+function buatGoogleForm() {
+  const html = HtmlService
+    .createHtmlOutputFromFile("FormUjian")
+    .setWidth(760)
+    .setHeight(760);
+
+  SpreadsheetApp.getUi().showModalDialog(
+    html,
+    "BUAT GOOGLE FORM BARU"
+  );
+}
