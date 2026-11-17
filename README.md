@@ -1,116 +1,34 @@
-# Google Formulir Otomatis
+# Generator Ujian Otomatis
 
-Sistem generator soal dan ujian otomatis berbasis Google Sheets, Google Forms, dan Google Apps Script.
+Generator Ujian Otomatis adalah sistem berbasis Google Sheets, Google Apps Script, dan Google Forms untuk membantu guru mengelola bank soal serta membuat ujian online secara otomatis.
 
-## Deskripsi
-
-Google Formulir Otomatis merupakan aplikasi berbasis Google Workspace untuk membantu guru mengelola bank soal, menyusun kisi-kisi, membuat Google Form ujian secara otomatis, mengelola data ujian, serta menganalisis hasil ujian dan kualitas butir soal.
-
-Sistem dirancang untuk mengurangi pekerjaan administratif guru dan meningkatkan efektivitas evaluasi pembelajaran.
+Sistem ini dirancang untuk mempermudah proses penyusunan ujian, mulai dari pengelolaan soal, validasi, pemilihan soal berdasarkan kriteria tertentu, hingga pembuatan Google Form dan pemetaan soal untuk kebutuhan analisis serta penilaian.
 
 ## Fitur Utama
 
-### 1. Manajemen Bank Soal
-- Menyimpan dan mengelola bank soal secara terstruktur.
-- Mendukung berbagai jenis soal.
-- Menyimpan kunci jawaban, poin, pembahasan, dan rubrik penilaian.
-- Mendukung deskripsi dan stimulus soal.
-
-### 2. Generator Google Form Otomatis
-- Membuat Google Form langsung dari BANK_SOAL.
-- Mengatur soal dan pilihan jawaban secara otomatis.
-- Mengatur kunci jawaban dan bobot nilai.
-- Mendukung impor soal dari dokumen Word (.docx).
-
-### 3. Jenis Soal yang Didukung
-
-| Kode | Jenis Soal |
-|---|---|
-| PG | Pilihan Ganda |
-| PGK | Pilihan Ganda Kompleks |
-| MJ | Menjodohkan |
-| IS | Isian Singkat |
-| UR | Uraian |
-
-### 4. Manajemen Ujian
-- Mencatat daftar ujian yang dibuat.
-- Menyimpan ID dan URL Google Form.
-- Mengelola pemetaan soal terhadap ujian.
-- Menghubungkan ujian dengan spreadsheet respons.
-- Menyinkronkan bobot soal dengan Google Form.
-
-### 5. Analisis Hasil Peserta
-- Mengambil respons langsung dari Google Form.
-- Menghitung nilai peserta berdasarkan skor aktual setiap soal.
-- Menghitung jumlah jawaban benar dan salah.
-- Mengidentifikasi soal yang belum dinilai.
-- Menentukan status ketuntasan berdasarkan KKM.
-
-### 6. Analisis Kualitas Butir Soal
-- Menghitung tingkat kesukaran soal.
-- Menghitung daya pembeda soal.
-- Mengelompokkan kualitas soal berdasarkan hasil analisis.
-- Mengidentifikasi soal yang perlu ditinjau kembali.
-
-## Struktur Spreadsheet
-
-Sistem menggunakan beberapa sheet utama:
-
-| Sheet | Fungsi |
-|---|---|
-| BANK_SOAL | Database soal |
-| PENGATURAN | Konfigurasi sistem |
-| PANDUAN | Petunjuk penggunaan |
-| KISI_KISI | Data kisi-kisi soal |
-| LOG_SOAL_FORM | Pencatatan proses generator |
-| DAFTAR_UJIAN | Database ujian |
-| PEMETAAN_SOAL_UJIAN | Pemetaan soal ke Google Form |
-| ANALISIS_UJIAN | Data analisis ujian |
-| ANALISIS_PESERTA | Hasil analisis peserta |
-| ANALISIS_PER_SOAL | Statistik kualitas setiap soal |
-| DASHBOARD_UJIAN | Ringkasan hasil ujian |
+- **Manajemen Bank Soal:** Menambahkan, mengedit, menghapus, dan mengelola soal dalam Google Sheets.
+- **Lima Jenis Soal:** Mendukung Pilihan Ganda (PG), Pilihan Ganda Kompleks (PGK), Menjodohkan (MJ), Isian Singkat (IS), dan Uraian (UR).
+- **Validasi Bank Soal:** Memeriksa kelengkapan data, format jawaban, kunci jawaban, rubrik, serta konsistensi metadata soal.
+- **Deteksi Soal Duplikat:** Mengidentifikasi pertanyaan dengan teks yang sama setelah normalisasi.
+- **Pencarian dan Filter:** Menemukan soal berdasarkan ID, mata pelajaran, kelas, materi, jenis soal, level Bloom, level kognitif, dan teks pertanyaan.
+- **Generator Google Form:** Membuat ujian online secara otomatis berdasarkan ID soal, pemilihan acak, atau kriteria tertentu.
+- **Antarmuka HTML:** Menyediakan formulir pembuatan ujian dengan tampilan yang lebih terstruktur dan mudah digunakan.
+- **Penyisipan Gambar Soal:** Mendukung penggunaan gambar yang tersimpan di Google Drive.
+- **Pemetaan Soal Ujian:** Mencatat hubungan antara soal di bank soal dan item pada Google Form.
+- **Kisi-Kisi Ujian:** Membuat kisi-kisi berdasarkan soal yang digunakan dalam ujian.
+- **Pencatatan Penggunaan Soal:** Menyimpan riwayat penambahan soal ke dalam Google Form.
 
 ## Teknologi
 
 - Google Sheets
-- Google Forms
 - Google Apps Script
-- JavaScript
-- Google Drive
+- Google Forms
+- HTML, CSS, dan JavaScript
 
-## Cara Penggunaan
+## Tujuan Pengembangan
 
-1. Siapkan spreadsheet utama.
-2. Isi BANK_SOAL dengan soal yang akan digunakan.
-3. Atur konfigurasi pada PENGATURAN.
-4. Jalankan generator untuk membuat Google Form.
-5. Distribusikan formulir kepada peserta.
-6. Setelah ujian selesai, jalankan analisis hasil peserta.
-7. Jalankan analisis per soal untuk mengevaluasi kualitas butir soal.
+Proyek ini dikembangkan untuk membangun sistem pembuatan ujian digital yang lebih efisien, terstruktur, dan mudah dikembangkan, sekaligus mengurangi pekerjaan administratif guru dalam penyusunan dan pengelolaan ujian.
 
 ## Status Pengembangan
 
-**Versi 2.0**
-
-Fitur yang telah berhasil dikembangkan dan diuji:
-
-- [x] Manajemen bank soal.
-- [x] Impor soal dari dokumen Word.
-- [x] Generator Google Form otomatis.
-- [x] Dukungan PG, PGK, MJ, IS, dan UR.
-- [x] Pemetaan soal ke ujian.
-- [x] Sinkronisasi bobot soal.
-- [x] Analisis hasil peserta.
-- [x] Perhitungan nilai berdasarkan skor Google Form.
-- [x] Analisis tingkat kesukaran.
-- [x] Analisis daya pembeda.
-
-## Catatan
-
-Aplikasi ini dikembangkan menggunakan Google Apps Script dan berjalan di lingkungan Google Workspace. Pengguna perlu memiliki akses ke Google Sheets, Google Forms, dan Google Drive.
-
-## Pengembang
-
-Google Formulir Otomatis
-
-Proyek pengembangan sistem evaluasi pembelajaran berbasis Google Workspace.
+Proyek masih dalam tahap pengembangan aktif. Fitur dan struktur sistem dapat berubah seiring proses pengembangan dan pengujian.
